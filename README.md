@@ -130,25 +130,42 @@ python src/sanity.py
 
 | Technology | Purpose |
 |------------|---------|
-| Python | Core programming language |
+| [Python](https://www.python.org/downloads/) | Core programming language |
 | [PyTorch](https://pytorch.org/) | Deep learning framework for VLM & Embeddings |
 | [Transformers](https://huggingface.co/docs/transformers/index) | Hugging Face library for VLM models |
 | [LightGBM](https://lightgbm.readthedocs.io/en/latest/) | Gradient boosting framework for text model |
 | [XGBoost](https://xgboost.ai/) | Gradient boosting framework for text model |
 | [Sentence-BERT](https://www.sbert.net/) | State-of-the-art sentence embeddings |
 | [Scikit-learn](https://scikit-learn.org/) | Machine learning utilities & validation |
-| Optuna | Hyperparameter optimization for ensembling |
-| MLflow | Experiment tracking and MLOps |
+| [Optuna](https://optuna.org/) | Hyperparameter optimization for ensembling |
+| [MLflow](https://mlflow.org/) | Experiment tracking and MLOps |
 
 ## 📊 Model Architecture
 
 Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model.
 
-```
-[Catalog Content] -> [Sentence-BERT Embeddings] -> [LightGBM + XGBoost Ensemble] -> [Text Prediction] ----\
-                                                                                                       \
-                                                                                                        -> [Optuna-Optimized Ensemble] -> [Final Price]
-[Product Image]   -> [VLM (moondream2) Inference] -> [Image Prediction] ---------------------------------/
+```mermaid
+graph TD
+    subgraph Text Pipeline
+        A["Catalog Content"] --> B["Sentence-BERT Embeddings"];
+        B --> C["LightGBM + XGBoost Ensemble"];
+        C --> D["Text Prediction"];
+    end
+
+    subgraph Vision Pipeline
+        E["Product Image"] --> F["VLM (moondream2) Inference"];
+        F --> G["Image Prediction"];
+    end
+
+    subgraph Final Ensemble
+        D --> H["Optuna-Optimized Ensemble"];
+        G --> H;
+        H --> I["🏆 Final Price Prediction"];
+    end
+
+    style A fill:#D6EAF8,stroke:#333,stroke-width:2px
+    style E fill:#D5F5E3,stroke:#333,stroke-width:2px
+    style I fill:#FAD7A0,stroke:#333,stroke-width:4px
 ```
 
 ## 🏆 Results
@@ -163,7 +180,7 @@ The performance of each model component is tracked via a robust 5-fold stratifie
 
 ## 📄 Documentation
 
-The final 1-page report for the judges can be found in `documentation_template.md`.
+The final 1-page report for the judges can be found in `Documentation.md`.
 
 ## 👥 Team Cognova
 
