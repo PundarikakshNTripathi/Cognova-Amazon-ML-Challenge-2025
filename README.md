@@ -31,17 +31,13 @@ This project implements a state-of-the-art multimodal machine learning solution 
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone https://github.com/PundarikakshNTripathi/Cognova-Amazon-ML-Challenge-2025.git
 
 # Navigate to the project directory
-cd cognova-amz-ml-challenge-2025
+cd Cognova-ML-Challenge-2025
 
 # Install dependencies
 pip install -r requirements.txt
-
-# Rename the dataset directory to data (our scripts expect 'data/' but files are provided in 'dataset/')
-mv dataset data
-# On Windows, use: ren dataset data
 ```
 
 ### 2. Run Text Model (Local Machine)
@@ -120,9 +116,9 @@ See [Documentation_template.md](Documentation_template.md) for the 1-page docume
 
 ## 👥 Team Cognova
 
-- Team Member 1
-- Team Member 2
-- Team Member 3
+- Pundarikaksh Narayan Tripathi
+- Ahmad Abdullah
+- Yash Raj
 
 ## 📝 License
 
