@@ -1,0 +1,13 @@
+pandas
+numpy
+scikit-learn
+lightgbm
+xgboost
+sentence-transformers
+torch
+transformers
+tqdm
+Pillow
+requests
+mlflow
+optuna
