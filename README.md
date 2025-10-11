@@ -1,67 +1,116 @@
 # Cognova - Amazon ML Challenge 2025
 
 <p align="center">
-  <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
-  <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
-  <img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="Scikit-learn" />
-  <img src="https://img.shields.io/badge/LightGBM-FF6D00?style=for-the-badge&logo=lightgbm&logoColor=white" alt="LightGBM" />
-  <img src="https://img.shields.io/badge/XGBoost-007ACC?style=for-the-badge&logo=xgboost&logoColor=white" alt="XGBoost" />
-  <img src="https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face" />
+<img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
+<img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
+<img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="Scikit-learn" />
+<img src="https://img.shields.io/badge/LightGBM-FF6D00?style=for-the-badge&logo=lightgbm&logoColor=white" alt="LightGBM" />
+<img src="https://img.shields.io/badge/XGBoost-007ACC?style=for-the-badge&logo=xgboost&logoColor=white" alt="XGBoost" />
+<img src="https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face" />
 </p>
 
 <p align="center">
-  <strong>Team Cognova's official submission for the Amazon ML Challenge 2025: Smart Product Pricing</strong>
+<strong>Team Cognova's official submission for the Amazon ML Challenge 2025: Smart Product Pricing</strong>
 </p>
 
 ## 📋 Project Overview
 
-This project implements a state-of-the-art multimodal machine learning solution to predict product prices based on textual descriptions and product images. Our approach is a robust, two-pipeline system where predictions from each modality are intelligently combined using an optimized ensemble.
+This project implements a state-of-the-art multimodal machine learning solution to predict product prices based on textual descriptions and product images. Our approach is a robust, two-pipeline system where predictions from each modality are intelligently combined using an optimized ensemble. This architecture is designed for high performance, rapid iteration, and reproducibility.
 
-### 🔍 Key Features
+## 🔍 Key Features
 
-1. **Advanced Text Model**: An ensemble of LightGBM and XGBoost models trained on high-quality text features. We moved beyond traditional methods by using Sentence-BERT embeddings to capture the deep semantic meaning of the product catalog_content.
+1. **Advanced Text Pipeline**: An ensemble of LightGBM and XGBoost models trained on high-quality text features. We utilize Sentence-BERT embeddings (all-MiniLM-L6-v2) to capture the deep semantic meaning of product descriptions, a significant upgrade over traditional methods. The pipeline includes separate, optimized scripts for both CPU and GPU execution, allowing for flexibility and speed.
 
-2. **Vision Language Model (VLM)**: A cutting-edge approach using the moondream2 VLM for direct price prediction from product images. This model performs inference via carefully crafted prompts to extract price information visually.
+2. **Vision Language Model (VLM) Pipeline**: A cutting-edge approach using the moondream2 VLM for direct price prediction from product images. This model performs inference via carefully crafted prompts. The script is heavily optimized with batch processing for massive GPU speedup and progress caching to ensure resilience against interruptions.
 
-3. **Optimized Ensemble**: The final predictions are a weighted average of the two models. The optimal weights are determined automatically using the Optuna hyperparameter optimization framework to directly minimize the competition's SMAPE metric on our robust local validation set.
+3. **Optimized Ensemble Strategy**: The final predictions are a weighted average of our best text model(s) and the VLM. The script intelligently combines predictions from both CPU and GPU text models if available, creating a more robust baseline. The final blending weights are determined automatically using the Optuna hyperparameter optimization framework to directly minimize the competition's SMAPE metric on our local validation set.
+
+4. **MLOps and Reproducibility**: The entire workflow is instrumented with MLflow for comprehensive experiment tracking of parameters, metrics, and artifacts. Caching mechanisms for embeddings and VLM predictions are implemented to drastically reduce runtimes after the initial execution.
 
 ## 🚀 Workflow & How to Run
 
 ### 1. Setup
 
+#### Environment Setup
+It is highly recommended to use a virtual environment. We recommend Python 3.11 for stability and compatibility with all libraries.
+
+**Using Conda:**
+```bash
+# Create a new conda environment
+conda create -n amc2025 python=3.11
+
+# Activate the environment
+conda activate amc2025
+```
+
+**Using venv (alternative):**
+```bash
+# Create a new virtual environment
+python -m venv amc2025
+
+# Activate the environment (Windows)
+.\amc2025\Scripts\activate
+
+# Activate the environment (macOS/Linux)
+source amc2025/bin/activate
+```
+
+#### Project Setup
 ```bash
 # Clone the repository
 git clone https://github.com/PundarikakshNTripathi/Cognova-Amazon-ML-Challenge-2025.git
 
 # Navigate to the project directory
-cd Cognova-ML-Challenge-2025
+cd Cognova-Amazon-ML-Challenge-2025
 
 # Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Run Text Model (Local Machine)
+#### GPU Configuration (Highly Recommended)
+For local GPU execution, ensure your environment is correctly configured:
+1. **NVIDIA Driver**: Install the NVIDIA Studio Driver for optimal performance in computational tasks.
+2. **GPU Mode**: If using a gaming laptop with a MUX switch (like NVIDIA Advanced Optimus), set the mode to "GPU Only" or "dGPU Mode" in your system's control software (e.g., OMEN Gaming Hub) and reboot. This guarantees that all scripts have access to the dedicated GPU.
 
-This script trains the text model ensemble and generates its predictions.
+### 2. Run Text Models (Local Machine)
 
+These scripts generate text-based predictions. The first run will be long as it generates and caches embeddings. Subsequent runs will be much faster. You can run either or both.
+
+To run the CPU version:
 ```bash
-python src/text_model.py
+python src/text_model_cpu.py
 ```
 
-This will create `submission_text_only.csv` and `oof_text_preds.csv` in a new `submissions/` folder.
+To run the GPU version (recommended for speed):
+```bash
+python src/text_model_gpu.py
+```
 
-### 3. Run VLM Model (Colab - GPU Required)
+These scripts will create prediction files (e.g., `submission_text_cpu.csv`, `oof_text_preds_gpu.csv`) in the `submissions/` folder.
 
-This script uses a VLM for inference and must be run in a GPU environment.
+### 3. Run VLM Model (Local GPU or Colab)
 
-- Upload the `src/image_model.py`, `src/utils.py` scripts and the `data/` folder to a Google Colab instance.
-- Ensure the runtime is set to use a GPU (e.g., T4).
-- Run the script in a Colab cell: `!python image_model.py`
-- After execution, download the generated `submissions/` folder from Colab and place its contents into your local `submissions/` folder.
+This script uses the VLM for image-based inference. It is heavily optimized for a GPU.
+
+**Local Execution (Recommended):**
+Ensure your GPU is configured as described in the setup.
+```bash
+python src/image_model.py
+```
+
+The script will download images and cache its progress, so you can safely stop and restart it.
+
+**Colab Fallback:**
+If you encounter local memory issues, you can use Google Colab:
+- Upload the `src/image_model.py`, `src/utils.py` scripts and the `data/` folder.
+- Ensure the Colab runtime is set to a GPU (e.g., T4).
+- Run `!pip install -r requirements.txt` in a cell.
+- Run the script: `!python image_model.py`.
+- After execution, download the generated `submissions/` folder and place its contents into your local `submissions/` folder.
 
 ### 4. Run Ensemble (Local Machine)
 
-This script finds the optimal blend of the text and VLM models and generates the final submission file.
+This script intelligently finds the best blend of all available model predictions and generates the final submission file.
 
 ```bash
 python src/ensemble.py
@@ -81,38 +130,40 @@ python src/sanity.py
 
 | Technology | Purpose |
 |------------|---------|
-| [Python](https://www.python.org/) | Core programming language |
-| [PyTorch](https://pytorch.org/) | Deep learning framework for VLM |
+| Python | Core programming language |
+| [PyTorch](https://pytorch.org/) | Deep learning framework for VLM & Embeddings |
 | [Transformers](https://huggingface.co/docs/transformers/index) | Hugging Face library for VLM models |
 | [LightGBM](https://lightgbm.readthedocs.io/en/latest/) | Gradient boosting framework for text model |
 | [XGBoost](https://xgboost.ai/) | Gradient boosting framework for text model |
-| [Sentence Transformers](https://www.sbert.net/) | State-of-the-art sentence embeddings |
-| [Scikit-learn](https://scikit-learn.org/) | Machine learning utilities |
-| [Optuna](https://optuna.org/) | Hyperparameter optimization framework |
-| [MLflow](https://mlflow.org/) | Experiment tracking |
+| [Sentence-BERT](https://www.sbert.net/) | State-of-the-art sentence embeddings |
+| [Scikit-learn](https://scikit-learn.org/) | Machine learning utilities & validation |
+| Optuna | Hyperparameter optimization for ensembling |
+| MLflow | Experiment tracking and MLOps |
 
 ## 📊 Model Architecture
 
-Our architecture consists of two parallel pipelines whose outputs (out-of-fold predictions on a log scale) are fed into a final weighted-average ensemble model.
+Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model.
 
 ```
 [Catalog Content] -> [Sentence-BERT Embeddings] -> [LightGBM + XGBoost Ensemble] -> [Text Prediction] ----\
                                                                                                        \
                                                                                                         -> [Optuna-Optimized Ensemble] -> [Final Price]
-[Product Image] -> [VLM (moondream2) Inference] -> [Image Prediction] ---------------------------------/
+[Product Image]   -> [VLM (moondream2) Inference] -> [Image Prediction] ---------------------------------/
 ```
 
 ## 🏆 Results
 
-| Model | SMAPE Score |
-|-------|-------------|
-| Text Model (OOF) | TBD |
-| VLM Model (OOF) | TBD |
-| Final Ensemble (OOF) | TBD |
+The performance of each model component is tracked via a robust 5-fold stratified cross-validation strategy. The final scores are based on the out-of-fold (OOF) predictions.
+
+| Model | SMAPE Score (OOF) |
+|-------|-------------------|
+| Text Model (CPU+GPU Avg) | TBD |
+| VLM Model | TBD |
+| Final Ensemble | TBD |
 
 ## 📄 Documentation
 
-See [Documentation_template.md](Documentation_template.md) for the 1-page document for the judges. It's written to be concise, professional, and highlight the innovative aspects of your solution.
+The final 1-page report for the judges can be found in `documentation_template.md`.
 
 ## 👥 Team Cognova
 
@@ -122,4 +173,4 @@ See [Documentation_template.md](Documentation_template.md) for the 1-page docume
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the Apache-2.0 License.

@@ -1,3 +1,7 @@
+# src/text_model_cpu.py
+# This script is optimized for running on a standard CPU.
+# It is reliable and doesn't require any special hardware setup.
+
 import pandas as pd
 import numpy as np
 import re
@@ -8,12 +12,14 @@ from sentence_transformers import SentenceTransformer
 import mlflow
 import os
 from utils import smape, start_mlflow_run
+from xgboost.callback import EarlyStopping
 
 # --- Configuration ---
 EXPERIMENT_NAME = "Amazon-Price-Prediction"
-RUN_NAME = "Text_Ensemble_SBERT_LGBM_XGB"
+RUN_NAME = "CPU_Text_Ensemble_SBERT_LGBM_XGB"
 N_SPLITS = 5
 TEXT_MODEL_NAME = 'all-MiniLM-L6-v2'
+EMBEDDINGS_FILE = 'data/text_embeddings.npy'
 
 # --- 1. Data Loading and Preprocessing ---
 print("Loading data...")
@@ -22,7 +28,6 @@ test_df = pd.read_csv('data/test.csv')
 full_df = pd.concat([train_df.drop('price', axis=1), test_df], ignore_index=True)
 
 print("Cleaning and Feature Engineering...")
-# Log transform is crucial for skewed targets like price
 train_df['price'] = np.log1p(train_df['price'])
 
 def extract_ipq(text):
@@ -30,29 +35,31 @@ def extract_ipq(text):
     return int(match.group(1)) if match else 1.0
 full_df['ipq'] = full_df['catalog_content'].apply(extract_ipq)
 
-# --- 2. Feature Extraction (Sentence-BERT Embeddings) ---
-print(f"Creating text embeddings with '{TEXT_MODEL_NAME}'...")
-# This model converts text into meaningful numerical vectors
-text_model = SentenceTransformer(TEXT_MODEL_NAME)
-# It's better to run this on a GPU if available, but CPU is fine
-text_embeddings = text_model.encode(full_df['catalog_content'].astype(str).tolist(), show_progress_bar=True)
+# --- 2. Feature Extraction (Sentence-BERT Embeddings with Caching) ---
+if os.path.exists(EMBEDDINGS_FILE):
+    print(f"Loading cached embeddings from {EMBEDDINGS_FILE}...")
+    text_embeddings = np.load(EMBEDDINGS_FILE)
+else:
+    print(f"Creating text embeddings with '{TEXT_MODEL_NAME}'... (This will take a while on the first run)")
+    text_model = SentenceTransformer(TEXT_MODEL_NAME)
+    text_embeddings = text_model.encode(full_df['catalog_content'].astype(str).tolist(), show_progress_bar=True)
+    print(f"Saving embeddings to {EMBEDDINGS_FILE} for future runs...")
+    os.makedirs('data', exist_ok=True)
+    np.save(EMBEDDINGS_FILE, text_embeddings)
 
-# Combine embeddings with our engineered IPQ feature
 X_full = np.hstack([text_embeddings, full_df[['ipq']].values])
 X_train = X_full[:len(train_df)]
 X_test = X_full[len(train_df):]
 y_train = train_df['price'].values
 
 # --- 3. Stratified Sampling for Robust Cross-Validation ---
-# We create bins from the continuous price data to ensure each fold
-# has a similar distribution of prices. This is a best practice.
 num_bins = int(np.floor(1 + np.log2(len(train_df))))
 train_df['price_bins'] = pd.cut(train_df['price'], bins=num_bins, labels=False)
 skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=42)
 
-# --- 4. Model Training and Experiment Tracking with MLflow ---
+# --- 4. Model Training (CPU) ---
 with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
-    mlflow.log_params({"n_splits": N_SPLITS, "text_model": TEXT_MODEL_NAME})
+    mlflow.log_params({"n_splits": N_SPLITS, "text_model": TEXT_MODEL_NAME, "device": "cpu"})
     
     oof_preds_lgb, test_preds_lgb = np.zeros(len(train_df)), np.zeros(len(test_df))
     oof_preds_xgb, test_preds_xgb = np.zeros(len(train_df)), np.zeros(len(test_df))
@@ -62,15 +69,23 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
         X_train_fold, y_train_fold = X_train[train_idx], y_train[train_idx]
         X_val_fold, y_val_fold = X_train[val_idx], y_train[val_idx]
 
-        # LightGBM
-        lgb_model = lgb.LGBMRegressor(random_state=42, n_estimators=2000, learning_rate=0.01, num_leaves=31)
+        # LightGBM (CPU)
+        print("  - Training LightGBM on CPU...")
+        lgb_model = lgb.LGBMRegressor(random_state=42, n_estimators=2000, learning_rate=0.01, num_leaves=31, n_jobs=-1)
         lgb_model.fit(X_train_fold, y_train_fold, eval_set=[(X_val_fold, y_val_fold)], callbacks=[lgb.early_stopping(100, verbose=False)])
         oof_preds_lgb[val_idx] = lgb_model.predict(X_val_fold)
         test_preds_lgb += lgb_model.predict(X_test) / N_SPLITS
 
-        # XGBoost
-        xgb_model = xgb.XGBRegressor(random_state=42, n_estimators=2000, learning_rate=0.01, max_depth=7)
-        xgb_model.fit(X_train_fold, y_train_fold, eval_set=[(X_val_fold, y_val_fold)], early_stopping_rounds=100, verbose=False)
+        # XGBoost (CPU)
+        print("  - Training XGBoost on CPU...")
+        xgb_model = xgb.XGBRegressor(random_state=42, n_estimators=2000, learning_rate=0.01, max_depth=7, tree_method='hist', n_jobs=-1)
+        xgb_model.fit(
+            X_train_fold,
+            y_train_fold,
+            eval_set=[(X_val_fold, y_val_fold)],
+            callbacks=[EarlyStopping(rounds=100)],
+            verbose=False
+        )
         oof_preds_xgb[val_idx] = xgb_model.predict(X_val_fold)
         test_preds_xgb += xgb_model.predict(X_test) / N_SPLITS
 
@@ -78,11 +93,10 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
     y_train_orig = np.expm1(y_train)
     smape_lgb = smape(y_train_orig, np.expm1(oof_preds_lgb))
     smape_xgb = smape(y_train_orig, np.expm1(oof_preds_xgb))
-    print(f"LGBM OOF SMAPE: {smape_lgb:.4f}")
+    print(f"\nLGBM OOF SMAPE: {smape_lgb:.4f}")
     print(f"XGB OOF SMAPE: {smape_xgb:.4f}")
     mlflow.log_metrics({"lgbm_oof_smape": smape_lgb, "xgb_oof_smape": smape_xgb})
 
-    # Simple Averaging Ensemble of the two text models
     oof_preds_ensemble = (oof_preds_lgb + oof_preds_xgb) / 2
     test_preds_ensemble = (test_preds_lgb + test_preds_xgb) / 2
     
@@ -94,8 +108,11 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
     print("Saving text model predictions...")
     os.makedirs('submissions', exist_ok=True)
     
-    pd.DataFrame({'sample_id': train_df['sample_id'], 'text_pred': oof_preds_ensemble}).to_csv('submissions/oof_text_preds.csv', index=False)
-    pd.DataFrame({'sample_id': test_df['sample_id'], 'price': np.expm1(test_preds_ensemble)}).to_csv('submissions/submission_text_only.csv', index=False)
-    mlflow.log_artifact('submissions/submission_text_only.csv')
+    pd.DataFrame({'sample_id': train_df['sample_id'], 'text_pred_cpu': oof_preds_ensemble}).to_csv('submissions/oof_text_preds_cpu.csv', index=False)
+    
+    submission_df = pd.DataFrame({'sample_id': test_df['sample_id'], 'price': np.expm1(test_preds_ensemble)})
+    submission_df['price'] = submission_df['price'].clip(0)
+    submission_df.to_csv('submissions/submission_text_cpu.csv', index=False)
+    mlflow.log_artifact('submissions/submission_text_cpu.csv')
 
-print("Text model script finished.")
+print("\nCPU Text model script finished successfully.")
