@@ -27,7 +27,7 @@ def download_images(df, image_dir='images/'):
     if not os.path.exists(image_dir):
         os.makedirs(image_dir)
     
-    for _, row in tqdm(df.iterrows(), total=df.shape, desc="Downloading Images"):
+    for _, row in tqdm(df.iterrows(), total=df.shape[0], desc="Downloading Images"):  
         link = row['image_link']
         image_name = link.split('/')[-1]
         save_path = os.path.join(image_dir, image_name)

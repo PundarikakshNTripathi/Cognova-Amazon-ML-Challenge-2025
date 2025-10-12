@@ -16,22 +16,52 @@ from utils import smape, start_mlflow_run, download_images
 EXPERIMENT_NAME = "Amazon-Price-Prediction"
 RUN_NAME = "VLM_Inference_Moondream2"
 IMAGE_DIR = 'images/'
-BATCH_SIZE = 16 # Process images in batches for massive speedup on GPU
 IS_DEBUG = False # Set to False for the full run
 
 # --- 1. Model and Data Setup ---
 print("Loading VLM model (moondream2)...")
+
+# Enhanced GPU detection and configuration
 device = "cuda" if torch.cuda.is_available() else "cpu"
-if device == 'cpu':
-    print("WARNING: No GPU found. This script will be extremely slow on CPU.")
+print(f"Using device: {device}")
+
+if device == "cuda":
+    print("✅ GPU detected! Using GPU acceleration")
+    print(f"GPU: {torch.cuda.get_device_name(0)}")
+    print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    BATCH_SIZE = 8  # Optimal for RTX 5060 8GB VRAM
+    torch_dtype = torch.float16  # Use half precision for memory efficiency
+    device_map = "auto"
+else:
+    print("⚠️  Running on CPU - this will be slower but still works")
+    BATCH_SIZE = 4  # Smaller batch for CPU
+    torch_dtype = torch.float32  # Full precision for CPU
+    device_map = None
+
+print(f"Batch size: {BATCH_SIZE}")
 
 model_id = "vikhyatk/moondream2"
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-# Use torch.float16 for half-precision to reduce memory usage on your GPU
+
+# ...existing code around line 30-45...
+
+# Optimized model loading with proper GPU configuration
 moondream_model = AutoModelForCausalLM.from_pretrained(
-    model_id, trust_remote_code=True, torch_dtype=torch.float16
-).to(device)
+    model_id, 
+    trust_remote_code=True, 
+    dtype=torch_dtype,  # Changed from torch_dtype to dtype
+    device_map=device_map,
+    low_cpu_mem_usage=True  # Reduce CPU memory usage during loading
+)
+
+if device_map is None:  # Manual device placement for CPU
+    moondream_model = moondream_model.to(device)
+
 moondream_model.eval()
+
+# Clear cache to free up memory
+if device == "cuda":
+    torch.cuda.empty_cache()
 
 print("Loading data...")
 train_df = pd.read_csv('data/train.csv')
@@ -62,10 +92,15 @@ def get_price_from_vlm_batch(image_paths, model, tokenizer):
     if not images:
         return {}
 
-    enc_images = model.encode_image(images).to(device)
-    prompts = ["What is the price of this product?" for _ in images]
-    
-    answers = model.answer_question(enc_images, prompts, tokenizer)
+    # Use torch.no_grad() to save memory during inference
+    with torch.no_grad():
+        enc_images = model.encode_image(images)
+        if hasattr(enc_images, 'to'):
+            enc_images = enc_images.to(device)
+        
+        prompts = ["What is the price of this product?" for _ in images]
+        
+        answers = model.answer_question(enc_images, prompts, tokenizer)
     
     results = {}
     for i, answer in enumerate(answers):
@@ -95,13 +130,17 @@ def process_dataframe(df, desc, cache_file):
     else:
         print(f"Found {len(paths_to_process)} new images to process.")
         for i in tqdm(range(0, len(paths_to_process), BATCH_SIZE), desc=desc):
-            batch_paths = paths_to_process
+            batch_paths = paths_to_process[i:i+BATCH_SIZE]  # Fix: properly slice the batch
             batch_results = get_price_from_vlm_batch(batch_paths, moondream_model, tokenizer)
             preds_dict.update(batch_results)
             
             # Save progress after each batch - this is your safety net
             temp_df = pd.DataFrame(list(preds_dict.items()), columns=['image_path', 'price'])
             temp_df.to_csv(cache_file, index=False)
+            
+            # Clear GPU cache periodically to prevent memory buildup
+            if device == "cuda" and i % (BATCH_SIZE * 4) == 0:
+                torch.cuda.empty_cache()
             
     final_preds = [preds_dict.get(p, np.nan) for p in image_paths]
     return final_preds

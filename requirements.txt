@@ -5,6 +5,8 @@ lightgbm
 xgboost
 sentence-transformers
 torch
+torchvision
+torchaudio
 transformers
 tqdm
 Pillow

@@ -167,6 +167,20 @@ graph TD
     style E fill:#D5F5E3,stroke:#333,stroke-width:2px
     style I fill:#FAD7A0,stroke:#333,stroke-width:4px
 ```
+## Performance Metrics (Out-of-Fold):
+
+- **CPU Text Ensemble SMAPE:** 60.0676
+  - LightGBM CPU: 60.8804
+  - XGBoost CPU: 59.4842
+
+- **GPU Text Ensemble SMAPE:** ~60.0 (LightGBM CPU + XGBoost GPU)
+  - LightGBM CPU: 60.8804 (CPU fallback for stability)
+  - XGBoost GPU: 59.2832
+
+**Technical Notes:**
+- GPU script uses CPU for LightGBM due to numerical precision issues on GPU
+- XGBoost GPU provides reliable acceleration without stability concerns
+- This hybrid approach maintains ensemble diversity while ensuring model quality
 
 ## 🏆 Results
 

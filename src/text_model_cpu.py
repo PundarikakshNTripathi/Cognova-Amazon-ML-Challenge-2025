@@ -78,14 +78,33 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
 
         # XGBoost (CPU)
         print("  - Training XGBoost on CPU...")
-        xgb_model = xgb.XGBRegressor(random_state=42, n_estimators=2000, learning_rate=0.01, max_depth=7, tree_method='hist', n_jobs=-1)
-        xgb_model.fit(
-            X_train_fold,
-            y_train_fold,
-            eval_set=[(X_val_fold, y_val_fold)],
-            callbacks=[EarlyStopping(rounds=100)],
-            verbose=False
+        xgb_model = xgb.XGBRegressor(
+            random_state=42, 
+            n_estimators=2000, 
+            learning_rate=0.01, 
+            max_depth=7, 
+            tree_method='hist', 
+            n_jobs=-1
         )
+        
+        try:
+            # Try the newer callback approach
+            xgb_model.fit(
+                X_train_fold,
+                y_train_fold,
+                eval_set=[(X_val_fold, y_val_fold)],
+                callbacks=[EarlyStopping(rounds=100)],
+                verbose=False
+            )
+        except TypeError:
+            # Fallback to parameter-based early stopping
+            xgb_model.set_params(early_stopping_rounds=100)
+            xgb_model.fit(
+                X_train_fold,
+                y_train_fold,
+                eval_set=[(X_val_fold, y_val_fold)],
+                verbose=False
+            )
         oof_preds_xgb[val_idx] = xgb_model.predict(X_val_fold)
         test_preds_xgb += xgb_model.predict(X_test) / N_SPLITS
 
