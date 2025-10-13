@@ -203,18 +203,18 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 
 ```mermaid
 flowchart TD
-  subgraph Text Pipeline
+  subgraph "Text Pipeline"
     A[Catalog Content] --> B[Sentence-BERT Embeddings]
     B --> C[LightGBM + XGBoost]
     C --> D[Text Prediction]
   end
 
-  subgraph Vision Pipeline - CNN
+  subgraph "Vision Pipeline (CNN)"
     E[Product Image] --> F[ResNet50 Features + LightGBM]
     F --> G[Image Prediction (CNN)]
   end
 
-  subgraph Final Ensemble
+  subgraph "Final Ensemble"
     D --> H[Optuna-Optimized Ensemble]
     G --> H
     H --> I[Final Price Prediction]
