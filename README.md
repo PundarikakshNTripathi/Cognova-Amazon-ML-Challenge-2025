@@ -88,6 +88,24 @@ python src/text_model_gpu.py
 
 These scripts will create prediction files (e.g., `submission_text_cpu.csv`, `oof_text_preds_gpu.csv`) in the `submissions/` folder.
 
+### 3. Run Fast Image CNN (GPU recommended)
+
+This path is fast and reliable: it extracts CNN features once and caches them, then trains LightGBM.
+
+- Quick train/predict using cached features when available:
+```bash
+python src/image_cnn_fast.py
+```
+
+- Generate proper 5-fold OOF and overwrite image CSVs (after features exist):
+```bash
+python src/image_cnn_fast.py --cv
+```
+
+Outputs in `submissions/`:
+- `oof_image_cnn.csv` (predicted_price)
+- `submission_image_cnn.csv` (price)
+
 ### 3. Run VLM Model (Local GPU or Colab)
 
 This script uses the VLM for image-based inference. It is heavily optimized for a GPU.
@@ -118,6 +136,20 @@ python src/ensemble.py
 
 This will create the final `final_ensemble_submission.csv` in the `submissions/` folder.
 
+### 4b. Run Advanced Ensemble (recommended)
+
+This optimized ensemble blends text (CPU/GPU) and image CNN predictions with Optuna-tuned weights and MLflow logging.
+
+```bash
+python src/ensemble_advanced.py
+```
+
+Artifacts:
+- OOF blend score (SMAPE) logged to MLflow
+- Final blended submission: `submissions/submission_ensemble_advanced.csv`
+
+Tip: The script auto-detects and fixes log-scale mismatches in OOF files (applies expm1 when needed). Test files are assumed to be on original price scale.
+
 ### 5. Sanity Check (Local Machine)
 
 Run this script to ensure the final submission file is correctly formatted before uploading.
@@ -133,6 +165,7 @@ python src/sanity.py
 | [Python](https://www.python.org/downloads/) | Core programming language |
 | [PyTorch](https://pytorch.org/) | Deep learning framework for VLM & Embeddings |
 | [Transformers](https://huggingface.co/docs/transformers/index) | Hugging Face library for VLM models |
+| [Torchvision](https://pytorch.org/vision/stable/index.html) | ResNet-50 feature extractor for fast CNN pipeline |
 | [LightGBM](https://lightgbm.readthedocs.io/en/latest/) | Gradient boosting framework for text model |
 | [XGBoost](https://xgboost.ai/) | Gradient boosting framework for text model |
 | [Sentence-BERT](https://www.sbert.net/) | State-of-the-art sentence embeddings |
@@ -148,26 +181,26 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 graph TD
     subgraph Text Pipeline
         A["Catalog Content"] --> B["Sentence-BERT Embeddings"];
-        B --> C["LightGBM + XGBoost Ensemble"];
+    B --> C["LightGBM + XGBoost"];
         C --> D["Text Prediction"];
     end
 
-    subgraph Vision Pipeline
-        E["Product Image"] --> F["VLM (moondream2) Inference"];
-        F --> G["Image Prediction"];
-    end
+  subgraph Vision Pipeline (fast)
+    E["Product Image"] --> F["ResNet50 Features + LightGBM"];
+    F --> G["Image Prediction (CNN)"];
+  end
 
     subgraph Final Ensemble
         D --> H["Optuna-Optimized Ensemble"];
         G --> H;
-        H --> I["🏆 Final Price Prediction"];
+    H --> I["Final Price Prediction"];
     end
 
     style A fill:#D6EAF8,stroke:#333,stroke-width:2px
     style E fill:#D5F5E3,stroke:#333,stroke-width:2px
     style I fill:#FAD7A0,stroke:#333,stroke-width:4px
 ```
-## Performance Metrics (Out-of-Fold):
+## Performance Metrics (Out-of-Fold)
 
 - **CPU Text Ensemble SMAPE:** 60.0676
   - LightGBM CPU: 60.8804
@@ -182,15 +215,54 @@ graph TD
 - XGBoost GPU provides reliable acceleration without stability concerns
 - This hybrid approach maintains ensemble diversity while ensuring model quality
 
+Additional highlights:
+- Fast CNN (ResNet50+LGBM): strong image-only baseline with proper 5-fold OOF
+- Advanced Ensemble (text_cpu + text_gpu + image_cnn): OOF SMAPE improved to ~58.02 after aligning OOF scales
+
 ## 🏆 Results
 
 The performance of each model component is tracked via a robust 5-fold stratified cross-validation strategy. The final scores are based on the out-of-fold (OOF) predictions.
 
 | Model | SMAPE Score (OOF) |
 |-------|-------------------|
-| Text Model (CPU+GPU Avg) | TBD |
-| VLM Model | TBD |
-| Final Ensemble | TBD |
+| Text Model (CPU) | 60.0676 |
+| Text Model (GPU) | 59.9404 |
+| Image CNN (ResNet50 + LGBM) | 59.3695 |
+| VLM Model | N/A (not used in final) |
+| Final Ensemble (Advanced) | ~58.02 |
+
+Note: Scores are from current OOF files and may vary slightly with different seeds or environments.
+
+## What changed vs. the original plan
+
+- Image model: We prioritized a fast CNN path (ResNet50 feature extractor + LightGBM) over the VLM for the final run due to runtime/resource constraints, while keeping the VLM pipeline available for future integration.
+- Ensembling: We moved to an Optuna-tuned ensemble with MLflow logging and automatic OOF log-scale alignment (expm1 when detected) to avoid scale mismatches.
+- Caching and resilience: Added aggressive caching (embeddings, image features, intermediate predictions), clearer stage logs, and resume-friendly behavior.
+
+### Future work (not in the final run)
+- Integrate VLM OOF/test predictions (e.g., cached VLM OOF when available) into the advanced ensemble.
+- Add lightweight structured features (e.g., explicit IPQ parsing, brand) to augment text/image pipelines.
+- Consider calibration (e.g., isotonic regression) if leaderboard feedback shows bias.
+
+## 🏁 Final Output to Submit
+
+- Required file name: `test_out.csv`
+- Required format: header `sample_id,price`, positive floats, and predictions for all 75k test IDs.
+- We keep the original blended file at `submissions/submission_ensemble_advanced.csv` and provide a copy at the repo root as `test_out.csv` for portal upload.
+
+## ⚙️ Troubleshooting and Notes
+
+- If image extraction appears stuck, look for "[Stage]" logs and tqdm progress bars; the script uses memmap caching and resumes cleanly.
+- LightGBM GPU can be inconsistent across versions; our code attempts GPU and falls back to CPU automatically.
+- OOF vs test scale: we auto-detect log1p OOFs and convert with expm1; test predictions are on original scale and should not be transformed.
+- Image download hiccups are retried; missing/corrupt images are handled with a neutral placeholder image.
+- Large CSVs: read selective columns/dtypes when possible to control memory.
+
+Platform notes:
+- PyTorch/Torchvision wheels in requirements use CUDA 12.9 index URLs. If you're on CPU-only or a different CUDA version, install matching wheels from the PyTorch site, or remove the index-url suffixes for CPU.
+- All scripts auto-detect CUDA and fall back to CPU when not available.
+
+Requirements: No changes are needed for this repo’s environment. Only adjust torch/torchvision lines to match your platform if necessary.
 
 ## 📄 Documentation
 

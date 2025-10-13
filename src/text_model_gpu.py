@@ -1,7 +1,11 @@
+"""GPU text pipeline: SBERT embeddings + LightGBM/XGBoost.
+
+Uses CUDA for fast embedding generation and XGBoost GPU; LightGBM may fall back
+to CPU for stability. Outputs OOF/test predictions for ensembling.
+"""
+
 # src/text_model_gpu.py
-# This script is optimized for running on an NVIDIA GPU.
-# It requires a proper CUDA environment and GPU-enabled builds of LightGBM and XGBoost.
-# This will be significantly faster than the CPU version.
+# Requires a CUDA environment and GPU-enabled builds for best speed.
 
 import pandas as pd
 import numpy as np

@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/PROFESSIONAL/Hackathons/Cognova-Amazon-ML-Challenge-2025/mlruns/340460406599836878/1e2e0c26ad384cde91eb5d8aa888279e/artifacts
+end_time: null
+entry_point_name: ''
+experiment_id: '340460406599836878'
+lifecycle_stage: active
+run_id: 1e2e0c26ad384cde91eb5d8aa888279e
+run_name: VLM_Inference_Moondream2_CUDA129_Fixed
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760355944160
+status: 1
+tags: []
+user_id: pndnt

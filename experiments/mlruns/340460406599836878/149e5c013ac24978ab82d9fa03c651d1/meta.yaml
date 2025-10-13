@@ -1,0 +1,14 @@
+artifact_uri: file:///C:/PROFESSIONAL/Hackathons/Cognova-Amazon-ML-Challenge-2025/mlruns/340460406599836878/149e5c013ac24978ab82d9fa03c651d1/artifacts
+end_time: 1760369274589
+entry_point_name: ''
+experiment_id: '340460406599836878'
+lifecycle_stage: active
+run_id: 149e5c013ac24978ab82d9fa03c651d1
+run_name: ENSEMBLE_Advanced_20251013_205753
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1760369274194
+status: 3
+tags: []
+user_id: pndnt

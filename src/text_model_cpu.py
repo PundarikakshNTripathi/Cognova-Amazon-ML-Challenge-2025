@@ -1,6 +1,11 @@
+"""CPU text pipeline: SBERT embeddings + LightGBM/XGBoost.
+
+Runs fully on CPU, caches embeddings to speed up re-runs, and writes OOF/test
+predictions to the submissions directory for ensembling.
+"""
+
 # src/text_model_cpu.py
-# This script is optimized for running on a standard CPU.
-# It is reliable and doesn't require any special hardware setup.
+# Optimized for a standard CPU; no special hardware required.
 
 import pandas as pd
 import numpy as np

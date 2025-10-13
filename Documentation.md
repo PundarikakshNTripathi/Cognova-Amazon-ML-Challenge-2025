@@ -8,7 +8,7 @@
 
 ## 1. Executive Summary
 
-Our solution addresses the Smart Product Pricing Challenge by implementing a state-of-the-art multimodal machine learning system that leverages both textual descriptions and product images. We developed a robust, two-pipeline architecture where predictions from each modality are intelligently combined using an optimized ensemble. This solution is designed for high performance, rapid iteration, and full reproducibility with comprehensive MLOps integration.
+Our solution addresses the Smart Product Pricing Challenge with a practical multimodal system leveraging both textual descriptions and product images. We implement two fast, reliable pipelines (Text + CNN image features) and blend them using an Optuna-optimized ensemble. The workflow is resume-friendly and fully tracked via MLflow for reproducibility.
 
 ---
 
@@ -28,15 +28,12 @@ Our initial Exploratory Data Analysis (EDA) revealed that product price is influ
 
 ### 2.2 Solution Strategy
 
-We adopted a multimodal ensemble strategy with four key innovations:
+We adopted a multimodal ensemble strategy with the following key components:
 
-1. **Advanced Text Pipeline**: Dual-optimized scripts (CPU/GPU) using Sentence-BERT embeddings (all-MiniLM-L6-v2) with LightGBM and XGBoost ensemble for maximum flexibility and speed.
-
-2. **Vision Language Model Pipeline**: Heavily optimized moondream2 VLM with batch processing, GPU acceleration, and progress caching for resilience against interruptions.
-
-3. **Intelligent Ensemble Strategy**: Automated weight optimization using Optuna framework to directly minimize SMAPE on validation data, with smart combination of CPU and GPU text model predictions when available.
-
-4. **MLOps Integration**: Complete workflow instrumentation with MLflow for experiment tracking, caching mechanisms for embeddings and VLM predictions to drastically reduce runtimes after initial execution.
+1. **Advanced Text Pipeline**: CPU/GPU variants using Sentence-BERT embeddings (all-MiniLM-L6-v2), with LightGBM and XGBoost regressors. Embeddings are cached to speed up subsequent runs.
+2. **Fast Image CNN Pipeline**: ResNet-50 feature extractor (torchvision) + LightGBM regressor. Features are memmap-cached (FP16). Optional 5-fold OOF generation via `--cv`.
+3. **Optimized Ensemble**: Optuna-tuned non-negative weights to minimize SMAPE on OOF. The code auto-detects log1p OOF mismatches and converts with `expm1`.
+4. **Optional VLM**: moondream2 VLM inference pipeline with batching and caching; can be integrated when available.
 
 **Approach Type:** Hybrid Multimodal Ensemble with MLOps  
 **Core Innovation:** Our core innovation lies in the production-ready fusion of two distinct, state-of-the-art pipelines with comprehensive reproducibility features. The final blending weights are mathematically determined using the **Optuna** framework to directly minimize the competition's SMAPE metric on our robust validation set.
@@ -50,10 +47,10 @@ We adopted a multimodal ensemble strategy with four key innovations:
 Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model with comprehensive MLOps tracking.
 
 ```
-[Catalog Content] -> [Sentence-BERT Embeddings] -> [LightGBM + XGBoost Ensemble] -> [Text Prediction] ----\
-                                                                                                       \
-                                                                                                        -> [Optuna-Optimized Ensemble] -> [Final Price]
-[Product Image]   -> [VLM (moondream2) Inference] -> [Image Prediction] ---------------------------------/
+[Catalog Content] -> [Sentence-BERT Embeddings] -> [LightGBM + XGBoost] -> [Text Prediction] ----\
+                                                                                               \
+                                                                                                -> [Optuna-Optimized Ensemble] -> [Final Price]
+[Product Image]   -> [ResNet50 Features + LightGBM] -> [Image Prediction (CNN)] -----------------/
 ```
 
 ### 3.2 Model Components
@@ -78,18 +75,15 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 
 - **Validation Strategy:** Robust 5-fold **Stratified Cross-Validation** with stratification on log-transformed price bins
 
-**Enhanced Image Processing Pipeline:**
+**Fast Image Processing Pipeline (CNN):**
 
-- **Model Type:** Pre-trained Vision Language Model `vikhyatk/moondream2` with custom optimization
-
-- **Technical Optimizations:**
-    - **Batch Processing**: Massive GPU speedup through intelligent batching
-    - **Progress Caching**: Resilient execution with ability to resume from interruptions
-    - **Memory Management**: Optimized for various GPU memory configurations
-
-- **Inference Method:** Carefully crafted prompts: "What is the price of this item? Answer with only a numerical value."
-
-- **Post-processing:** Robust parsing with regular expressions and intelligent imputation strategies
+- **Backbone:** torchvision ResNet-50 as fixed feature extractor (penultimate layer)
+- **Regressor:** LightGBM on pooled 2048-dim features
+- **Optimizations:**
+    - FP16 memmap cache to reduce RAM
+    - DataLoader tuning (num_workers, prefetch)
+    - Autocast on CUDA for throughput
+    - 5-fold OOF via `--cv`
 
 **MLOps and Reproducibility Features:**
 
@@ -107,9 +101,10 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 Our final model's performance was rigorously evaluated using a robust 5-fold stratified cross-validation framework. The out-of-fold (OOF) predictions were used to calculate the SMAPE score, providing an unbiased estimate of performance on unseen data. All metrics are tracked comprehensively through MLflow for full reproducibility.
 
 **Performance Metrics (Out-of-Fold):**
-- **Final Ensemble SMAPE Score:** TBD
-- **Text Model (CPU+GPU Average) SMAPE:** TBD  
-- **VLM Model SMAPE:** TBD
+- Text Model (CPU): 60.0676
+- Text Model (GPU): 59.9404 (XGBoost GPU, LightGBM CPU fallback)
+- Image CNN (ResNet50 + LightGBM): 59.3695
+- Final Ensemble (text_cpu + text_gpu + image_cnn): ~58.02 (after OOF scale alignment)
 
 **Technical Performance:**
 - **First Run Time**: Extended due to embedding generation and image processing
@@ -130,7 +125,7 @@ Key achievements include:
 - **Scalability**: Optimized implementations for various hardware configurations
 - **Resilience**: Progress caching and resumable execution for long-running processes
 
-This structured, production-ready workflow with full MLOps integration represents a significant advancement in practical machine learning system design for pricing prediction tasks.
+This production-ready, cache-first workflow with MLflow tracking is designed for reliability, speed, and clean integration of multimodal signals for pricing prediction.
 
 ---
 
@@ -143,11 +138,27 @@ This structured, production-ready workflow with full MLOps integration represent
 **Key Files:**
 - `src/text_model_cpu.py` - CPU-optimized text pipeline
 - `src/text_model_gpu.py` - GPU-accelerated text pipeline  
-- `src/image_model.py` - Optimized VLM pipeline with caching
-- `src/ensemble.py` - Intelligent ensemble optimization
+- `src/image_cnn_fast.py` - Fast CNN features + LightGBM with OOF support
+- `src/image_model.py` - VLM pipeline with caching (optional; not used in final run)
+- `src/ensemble_advanced.py` - Optuna-tuned ensemble with MLflow logging
 - `src/utils.py` - Shared utilities and caching functions
 
 **Environment Requirements:**
 - Python 3.11+ (recommended for stability)
 - CUDA-capable GPU (recommended for optimal performance)
 - Comprehensive dependency management via `requirements.txt`
+
+### C. Changes vs. Original Plan and Future Work
+
+We originally planned to rely heavily on a VLM for image signals but shifted to a faster, more predictable CNN feature path (ResNet50 + LightGBM) for the final run. The VLM pipeline remains available and can be integrated later as an additional model in the ensemble.
+
+Future improvements:
+- Integrate VLM OOF/test predictions when ready and re-run the advanced ensemble.
+- Add structured text features (e.g., brand/IPQ detection) to complement embeddings.
+- Explore lightweight calibration if leaderboard analysis shows bias.
+
+### B. Submission Format
+
+- Final output file name: `test_out.csv`
+- Columns: `sample_id,price`
+- Ensure predictions are positive floats and include all test IDs (75k)
