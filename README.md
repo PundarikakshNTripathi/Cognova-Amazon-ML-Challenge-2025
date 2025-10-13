@@ -27,7 +27,57 @@ This project implements a state-of-the-art multimodal machine learning solution 
 
 4. **MLOps and Reproducibility**: The entire workflow is instrumented with MLflow for comprehensive experiment tracking of parameters, metrics, and artifacts. Caching mechanisms for embeddings and VLM predictions are implemented to drastically reduce runtimes after the initial execution.
 
-## 🚀 Workflow & How to Run
+## � End-to-end process overview
+
+Here’s how the full pipeline fits together:
+
+1. Inputs
+   - `data/train.csv`: training rows with `sample_id`, `catalog_content`, `image_link`, `price`.
+   - `data/test.csv`: test rows with `sample_id`, `catalog_content`, `image_link` (no `price`).
+2. Text features
+   - Scripts: `src/text_model_cpu.py`, `src/text_model_gpu.py`.
+   - Steps: clean/catalog parsing, SBERT embeddings (cached to `data/text_embeddings.npy`), LightGBM + XGBoost training with stratified CV on log(price), OOF/test predictions saved to `submissions/`.
+3. Image features (fast CNN)
+   - Script: `src/image_cnn_fast.py`.
+   - Steps: resolve image paths, extract ResNet-50 pooled features (cached, FP16 memmap), train LightGBM, produce OOF/test predictions. Use `--cv` for 5-fold OOF.
+4. Advanced Ensemble
+   - Script: `src/ensemble_advanced.py`.
+   - Steps: load available OOFs, auto-fix log-scale mismatches (OOF), optimize non-negative weights with Optuna (minimize SMAPE), log to MLflow, blend test predictions, write `submissions/submission_ensemble_advanced.csv`.
+5. Submission copy
+   - Copy final blend to repository root as `test_out.csv` for portal upload.
+
+## 📁 Directory and file guide
+
+- `data/`
+  - `train.csv`, `test.csv`: official inputs.
+  - `sample_test.csv`, `sample_test_out.csv`: format examples from the challenge.
+  - `features_*_resnet50_fp16.npy`: cached CNN features (if present).
+  - `text_embeddings.npy`: cached SBERT embeddings.
+- `images/`
+  - Downloaded images (if using image pipelines); resolved by `src/image_cnn_fast.py` and `src/image_model.py`.
+- `src/`
+  - `utils.py`: utility functions (SMAPE, MLflow helpers, image download).
+  - `text_model_cpu.py`: text-only pipeline on CPU; caches embeddings; writes OOF/test CSVs.
+  - `text_model_gpu.py`: text-only pipeline using GPU for embedding generation/XGBoost; writes OOF/test CSVs.
+  - `image_cnn_fast.py`: fast image pipeline (ResNet50 features + LightGBM), feature caching, optional `--cv` for OOF.
+  - `image_model.py`: optional VLM image pipeline (moondream2) with batching/caching; not used in final run.
+  - `ensemble_advanced.py`: Optuna-weighted ensemble with MLflow logging; outputs final blended CSV.
+- `submissions/`
+  - OOF files: `oof_text_preds_cpu.csv`, `oof_text_preds_gpu.csv`, `oof_image_cnn.csv`.
+  - Test predictions: `submission_text_cpu.csv`, `submission_text_gpu.csv`, `submission_image_cnn.csv`.
+  - Final blend: `submission_ensemble_advanced.csv` (source for `test_out.csv`).
+- `experiments/mlruns/`
+  - MLflow runs, params, metrics, and artifacts for traceability.
+- `archive/`
+  - Non-essential or auxiliary assets (e.g., colab_upload) kept here to reduce clutter.
+- Top-level files
+  - `README.md`: quickstart, approach, results, troubleshooting.
+  - `Documentation.md`: 1-page formal report aligned with the challenge template.
+  - `requirements.txt`: dependencies; adjust torch/torchvision wheels for your platform/CUDA if needed.
+  - `LICENSE`: licensing information (Apache-2.0).
+  - `test_out.csv`: final submission file for the portal.
+
+## �🚀 Workflow & How to Run
 
 ### 1. Setup
 
@@ -92,7 +142,7 @@ These scripts will create prediction files (e.g., `submission_text_cpu.csv`, `oo
 
 This path is fast and reliable: it extracts CNN features once and caches them, then trains LightGBM.
 
-- Quick train/predict using cached features when available:
+```
 ```bash
 python src/image_cnn_fast.py
 ```
@@ -116,26 +166,6 @@ Ensure your GPU is configured as described in the setup.
 python src/image_model.py
 ```
 
-The script will download images and cache its progress, so you can safely stop and restart it.
-
-**Colab Fallback:**
-If you encounter local memory issues, you can use Google Colab:
-- Upload the `src/image_model.py`, `src/utils.py` scripts and the `data/` folder.
-- Ensure the Colab runtime is set to a GPU (e.g., T4).
-- Run `!pip install -r requirements.txt` in a cell.
-- Run the script: `!python image_model.py`.
-- After execution, download the generated `submissions/` folder and place its contents into your local `submissions/` folder.
-
-### 4. Run Ensemble (Local Machine)
-
-This script intelligently finds the best blend of all available model predictions and generates the final submission file.
-
-```bash
-python src/ensemble.py
-```
-
-This will create the final `final_ensemble_submission.csv` in the `submissions/` folder.
-
 ### 4b. Run Advanced Ensemble (recommended)
 
 This optimized ensemble blends text (CPU/GPU) and image CNN predictions with Optuna-tuned weights and MLflow logging.
@@ -150,13 +180,7 @@ Artifacts:
 
 Tip: The script auto-detects and fixes log-scale mismatches in OOF files (applies expm1 when needed). Test files are assumed to be on original price scale.
 
-### 5. Sanity Check (Local Machine)
 
-Run this script to ensure the final submission file is correctly formatted before uploading.
-
-```bash
-python src/sanity.py
-```
 
 ## 🛠 Tech Stack
 
@@ -178,27 +202,23 @@ python src/sanity.py
 Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model.
 
 ```mermaid
-graph TD
-    subgraph Text Pipeline
-        A["Catalog Content"] --> B["Sentence-BERT Embeddings"];
-    B --> C["LightGBM + XGBoost"];
-        C --> D["Text Prediction"];
-    end
-
-  subgraph Vision Pipeline (fast)
-    E["Product Image"] --> F["ResNet50 Features + LightGBM"];
-    F --> G["Image Prediction (CNN)"];
+flowchart TD
+  subgraph Text Pipeline
+    A[Catalog Content] --> B[Sentence-BERT Embeddings]
+    B --> C[LightGBM + XGBoost]
+    C --> D[Text Prediction]
   end
 
-    subgraph Final Ensemble
-        D --> H["Optuna-Optimized Ensemble"];
-        G --> H;
-    H --> I["Final Price Prediction"];
-    end
+  subgraph Vision Pipeline - CNN
+    E[Product Image] --> F[ResNet50 Features + LightGBM]
+    F --> G[Image Prediction (CNN)]
+  end
 
-    style A fill:#D6EAF8,stroke:#333,stroke-width:2px
-    style E fill:#D5F5E3,stroke:#333,stroke-width:2px
-    style I fill:#FAD7A0,stroke:#333,stroke-width:4px
+  subgraph Final Ensemble
+    D --> H[Optuna-Optimized Ensemble]
+    G --> H
+    H --> I[Final Price Prediction]
+  end
 ```
 ## Performance Metrics (Out-of-Fold)
 
@@ -277,3 +297,4 @@ The final 1-page report for the judges can be found in `Documentation.md`.
 ## 📝 License
 
 This project is licensed under the Apache-2.0 License.
+
