@@ -31,9 +31,8 @@ Our initial Exploratory Data Analysis (EDA) revealed that product price is influ
 We adopted a multimodal ensemble strategy with the following key components:
 
 1. **Advanced Text Pipeline**: CPU/GPU variants using Sentence-BERT embeddings (all-MiniLM-L6-v2), with LightGBM and XGBoost regressors. Embeddings are cached to speed up subsequent runs.
-2. **Fast Image CNN Pipeline**: ResNet-50 feature extractor (torchvision) + LightGBM regressor. Features are memmap-cached (FP16). Optional 5-fold OOF generation via `--cv`.
-3. **Optimized Ensemble**: Optuna-tuned non-negative weights to minimize SMAPE on OOF. The code auto-detects log1p OOF mismatches and converts with `expm1`.
-4. **Optional VLM**: moondream2 VLM inference pipeline with batching and caching; can be integrated when available.
+2. **Fast CNN Image Pipeline**: Production-ready approach using ResNet-50 as a fixed feature extractor + LightGBM regressor. Features are memmap-cached (FP16) for fast re-runs. Optional 5-fold OOF generation via `--cv`. This path balances speed, reliability, and performance under time constraints. *(Originally explored a VLM-based approach using moondream2, but prioritized the CNN path for the final submission due to runtime and resource considerations. The VLM pipeline remains available for future integration.)*
+3. **Optimized Ensemble**: Optuna-tuned non-negative weights to minimize SMAPE on OOF. The code auto-detects log1p OOF mismatches and converts with `expm1`. Blends text and CNN image predictions intelligently.
 
 **Approach Type:** Hybrid Multimodal Ensemble with MLOps  
 **Core Innovation:** Our core innovation lies in the production-ready fusion of two distinct, state-of-the-art pipelines with comprehensive reproducibility features. The final blending weights are mathematically determined using the **Optuna** framework to directly minimize the competition's SMAPE metric on our robust validation set.
@@ -46,11 +45,24 @@ We adopted a multimodal ensemble strategy with the following key components:
 
 Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model with comprehensive MLOps tracking.
 
-```
-[Catalog Content] -> [Sentence-BERT Embeddings] -> [LightGBM + XGBoost] -> [Text Prediction] ----\
-                                                                                               \
-                                                                                                -> [Optuna-Optimized Ensemble] -> [Final Price]
-[Product Image]   -> [ResNet50 Features + LightGBM] -> [Image Prediction (CNN)] -----------------/
+```mermaid
+flowchart TD
+  subgraph text[Text Pipeline]
+    A[Catalog Content] --> B[Sentence-BERT Embeddings]
+    B --> C[LightGBM + XGBoost]
+    C --> D[Text Prediction]
+  end
+
+  subgraph vision[Vision Pipeline - CNN]
+    E[Product Image] --> F[ResNet50 Features + LightGBM]
+    F --> G[Image Prediction - CNN]
+  end
+
+  subgraph ensemble[Final Ensemble]
+    D --> H[Optuna-Optimized Ensemble]
+    G --> H
+    H --> I[Final Price Prediction]
+  end
 ```
 
 ### 3.2 Model Components
@@ -88,9 +100,9 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 **MLOps and Reproducibility Features:**
 
 - **Experiment Tracking**: Complete MLflow integration for parameters, metrics, and artifacts
-- **Caching Systems**: Intelligent caching for embeddings and VLM predictions
-- **Progress Persistence**: Ability to resume long-running processes
-- **Environment Management**: Comprehensive setup instructions for CPU/GPU environments
+- **Caching Systems**: Intelligent caching for embeddings, CNN features, and intermediate predictions
+- **Progress Persistence**: Ability to resume long-running processes with progress logs
+- **Environment Management**: Comprehensive setup instructions for CPU/GPU environments with automatic fallback
 
 ---
 
@@ -116,7 +128,7 @@ Our final model's performance was rigorously evaluated using a robust 5-fold str
 
 ## 5. Conclusion
 
-Our solution demonstrates the power of a production-ready multimodal ensemble with comprehensive MLOps integration. By implementing dual-optimized text pipelines (CPU/GPU), a heavily optimized VLM pipeline with batch processing and caching, and intelligent ensemble optimization using Optuna, we created a system that is not only highly accurate but also practical for real-world deployment. 
+Our solution demonstrates the power of a production-ready multimodal ensemble with comprehensive MLOps integration. By implementing dual-optimized text pipelines (CPU/GPU), a fast and reliable CNN image pipeline (ResNet-50 + LightGBM) with FP16 feature caching, and intelligent ensemble optimization using Optuna, we created a system that is not only highly accurate but also practical for real-world deployment. 
 
 Key achievements include:
 - **Performance**: State-of-the-art accuracy through intelligent multimodal fusion

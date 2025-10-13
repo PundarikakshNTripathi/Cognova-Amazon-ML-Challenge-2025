@@ -4,7 +4,6 @@ Uses CUDA for fast embedding generation and XGBoost GPU; LightGBM may fall back
 to CPU for stability. Outputs OOF/test predictions for ensembling.
 """
 
-# src/text_model_gpu.py
 # Requires a CUDA environment and GPU-enabled builds for best speed.
 
 import pandas as pd

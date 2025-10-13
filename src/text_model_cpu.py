@@ -4,7 +4,6 @@ Runs fully on CPU, caches embeddings to speed up re-runs, and writes OOF/test
 predictions to the submissions directory for ensembling.
 """
 
-# src/text_model_cpu.py
 # Optimized for a standard CPU; no special hardware required.
 
 import pandas as pd
