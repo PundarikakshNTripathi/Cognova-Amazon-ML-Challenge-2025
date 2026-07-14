@@ -3,7 +3,7 @@
 <p align="center">
 <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" />
 <img src="https://img.shields.io/badge/PyTorch-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch" />
-<img src="https://img.shields.io/badge/scikit--learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="Scikit-learn" />
+<img src="https://img.shields.io/badge/scikit learn-F7931E?style=for-the-badge&logo=scikit-learn&logoColor=white" alt="Scikit-learn" />
 <img src="https://img.shields.io/badge/LightGBM-FF6D00?style=for-the-badge&logo=lightgbm&logoColor=white" alt="LightGBM" />
 <img src="https://img.shields.io/badge/XGBoost-007ACC?style=for-the-badge&logo=xgboost&logoColor=white" alt="XGBoost" />
 <img src="https://img.shields.io/badge/Hugging_Face-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face" />
@@ -13,15 +13,15 @@
 <strong>Team Cognova's official submission for the Amazon ML Challenge 2025: Smart Product Pricing</strong>
 </p>
 
-## 📋 Project Overview
+## Project Overview
 
 This project implements a state-of-the-art multimodal machine learning solution to predict product prices based on textual descriptions and product images. Our approach is a robust, two-pipeline system where predictions from each modality are intelligently combined using an optimized ensemble. This architecture is designed for high performance, rapid iteration, and reproducibility.
 
-## 🔍 Key Features
+## Key Features
 
 1. **Advanced Text Pipeline**: An ensemble of LightGBM and XGBoost models trained on high-quality text features. We utilize Sentence-BERT embeddings (all-MiniLM-L6-v2) to capture the deep semantic meaning of product descriptions, a significant upgrade over traditional methods. The pipeline includes separate, optimized scripts for both CPU and GPU execution, allowing for flexibility and speed.
 
-2. **Fast CNN Image Pipeline**: A production-ready approach using ResNet-50 as a fixed feature extractor, feeding 2048-dimensional pooled features into LightGBM for regression. Features are cached as FP16 memmaps for fast re-runs, and the pipeline supports 5-fold out-of-fold generation for proper ensembling. This path balances speed, reliability, and performance under time constraints. *(Originally, we explored a VLM-based approach using moondream2 for direct price prediction from images, but prioritized the CNN path for the final run due to runtime and resource considerations. The VLM pipeline remains available for future integration.)*
+2. **Fast CNN Image Pipeline**: A production-ready approach using ResNet-50 as a fixed feature extractor, feeding 2048-dimensional pooled features into LightGBM for regression. Features are cached as FP16 memmaps for fast re-runs, and the pipeline supports 5-fold out-of-fold generation for proper ensembling. This path balances speed, reliability, and performance under time constraints. The VLM pipeline is maintained as an experimental alternative.
 
 3. **Optimized Ensemble Strategy**: The final predictions are a weighted blend of text and image CNN models. The script intelligently combines predictions from both CPU and GPU text models when available, and automatically optimizes non-negative weights using the Optuna hyperparameter optimization framework to directly minimize the competition's SMAPE metric on our local out-of-fold validation set. It also auto-detects and corrects log-scale mismatches in OOF predictions.
 
@@ -39,14 +39,14 @@ Here’s how the full pipeline fits together:
    - Steps: clean/catalog parsing, SBERT embeddings (cached to `data/text_embeddings.npy`), LightGBM + XGBoost training with stratified CV on log(price), OOF/test predictions saved to `submissions/`.
 3. Image features (fast CNN)
    - Script: `src/image_cnn_fast.py`.
-   - Steps: resolve image paths, extract ResNet-50 pooled features (cached, FP16 memmap), train LightGBM, produce OOF/test predictions. Use `--cv` for 5-fold OOF.
+   - Steps: resolve image paths, extract ResNet-50 pooled features (cached, FP16 memmap), train LightGBM, produce OOF/test predictions. Use ` cv` for 5-fold OOF.
 4. Advanced Ensemble
    - Script: `src/ensemble_advanced.py`.
    - Steps: load available OOFs, auto-fix log-scale mismatches (OOF), optimize non-negative weights with Optuna (minimize SMAPE), log to MLflow, blend test predictions, write `submissions/submission_ensemble_advanced.csv`.
 5. Submission copy
    - Copy final blend to repository root as `test_out.csv` for portal upload.
 
-## 📁 Directory and file guide
+## Directory and file guide
 
 - `data/`
   - `train.csv`, `test.csv`: official inputs.
@@ -59,7 +59,7 @@ Here’s how the full pipeline fits together:
   - `utils.py`: utility functions (SMAPE, MLflow helpers, image download).
   - `text_model_cpu.py`: text-only pipeline on CPU; caches embeddings; writes OOF/test CSVs.
   - `text_model_gpu.py`: text-only pipeline using GPU for embedding generation/XGBoost; writes OOF/test CSVs.
-  - `image_cnn_fast.py`: fast image pipeline (ResNet50 features + LightGBM), feature caching, optional `--cv` for OOF.
+  - `image_cnn_fast.py`: fast image pipeline (ResNet50 features + LightGBM), feature caching, optional ` cv` for OOF.
   - `image_model.py`: optional VLM image pipeline (moondream2) with batching/caching; not used in final run.
   - `ensemble_advanced.py`: Optuna-weighted ensemble with MLflow logging; outputs final blended CSV.
 - `submissions/`
@@ -74,10 +74,10 @@ Here’s how the full pipeline fits together:
   - `README.md`: quickstart, approach, results, troubleshooting.
   - `Documentation.md`: 1-page formal report aligned with the challenge template.
   - `requirements.txt`: dependencies; adjust torch/torchvision wheels for your platform/CUDA if needed.
-  - `LICENSE`: licensing information (Apache-2.0).
+  - `LICENSE`: licensing information (Elastic License 2.0).
   - `test_out.csv`: final submission file for the portal.
 
-## �🚀 Workflow & How to Run
+## � Workflow & How to Run
 
 ### 1. Setup
 
@@ -149,7 +149,7 @@ python src/image_cnn_fast.py
 
 - Generate proper 5-fold OOF and overwrite image CSVs (after features exist):
 ```bash
-python src/image_cnn_fast.py --cv
+python src/image_cnn_fast.py  cv
 ```
 
 Outputs in `submissions/`:
@@ -182,10 +182,10 @@ Tip: The script auto-detects and fixes log-scale mismatches in OOF files (applie
 
 
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Technology | Purpose |
-|------------|---------|
+|      |    -|
 | [Python](https://www.python.org/downloads/) | Core programming language |
 | [PyTorch](https://pytorch.org/) | Deep learning framework for VLM & Embeddings |
 | [Transformers](https://huggingface.co/docs/transformers/index) | Hugging Face library for VLM models |
@@ -197,27 +197,27 @@ Tip: The script auto-detects and fixes log-scale mismatches in OOF files (applie
 | [Optuna](https://optuna.org/) | Hyperparameter optimization for ensembling |
 | [MLflow](https://mlflow.org/) | Experiment tracking and MLOps |
 
-## 📊 Model Architecture
+## Model Architecture
 
 Our architecture consists of two parallel pipelines whose outputs are fed into a final, intelligently weighted ensemble model.
 
 ```mermaid
 flowchart TD
   subgraph text[Text Pipeline]
-    A[Catalog Content] --> B[Sentence-BERT Embeddings]
-    B --> C[LightGBM + XGBoost]
-    C --> D[Text Prediction]
+    A[Catalog Content]  > B[Sentence-BERT Embeddings]
+    B  > C[LightGBM + XGBoost]
+    C  > D[Text Prediction]
   end
 
   subgraph vision[Vision Pipeline - CNN]
-    E[Product Image] --> F[ResNet50 Features + LightGBM]
-    F --> G[Image Prediction - CNN]
+    E[Product Image]  > F[ResNet50 Features + LightGBM]
+    F  > G[Image Prediction - CNN]
   end
 
   subgraph ensemble[Final Ensemble]
-    D --> H[Optuna-Optimized Ensemble]
-    G --> H
-    H --> I[Final Price Prediction]
+    D  > H[Optuna-Optimized Ensemble]
+    G  > H
+    H  > I[Final Price Prediction]
   end
 ```
 ## Performance Metrics (Out-of-Fold)
@@ -239,12 +239,12 @@ Additional highlights:
 - Fast CNN (ResNet50+LGBM): strong image-only baseline with proper 5-fold OOF
 - Advanced Ensemble (text_cpu + text_gpu + image_cnn): OOF SMAPE improved to ~58.02 after aligning OOF scales
 
-## 🏆 Results
+## Results
 
 The performance of each model component is tracked via a robust 5-fold stratified cross-validation strategy. The final scores are based on the out-of-fold (OOF) predictions.
 
 | Model | SMAPE Score (OOF) |
-|-------|-------------------|
+|   -|         -|
 | Text Model (CPU) | 60.0676 |
 | Text Model (GPU) | 59.9404 |
 | Image CNN (ResNet50 + LGBM) | 59.3695 |
@@ -253,7 +253,7 @@ The performance of each model component is tracked via a robust 5-fold stratifie
 
 Note: Scores are from current OOF files and may vary slightly with different seeds or environments.
 
-## What changed vs. the original plan
+## Architectural Adjustments
 
 - Image model: We prioritized a fast CNN path (ResNet50 feature extractor + LightGBM) over the VLM for the final run due to runtime/resource constraints, while keeping the VLM pipeline available for future integration.
 - Ensembling: We moved to an Optuna-tuned ensemble with MLflow logging and automatic OOF log-scale alignment (expm1 when detected) to avoid scale mismatches.
@@ -264,13 +264,13 @@ Note: Scores are from current OOF files and may vary slightly with different see
 - Add lightweight structured features (e.g., explicit IPQ parsing, brand) to augment text/image pipelines.
 - Consider calibration (e.g., isotonic regression) if leaderboard feedback shows bias.
 
-## 🏁 Final Output to Submit
+## Final Output to Submit
 
 - Required file name: `test_out.csv`
 - Required format: header `sample_id,price`, positive floats, and predictions for all 75k test IDs.
 - We keep the original blended file at `submissions/submission_ensemble_advanced.csv` and provide a copy at the repo root as `test_out.csv` for portal upload.
 
-## ⚙️ Troubleshooting and Notes
+## Troubleshooting and Notes
 
 - If image extraction appears stuck, look for "[Stage]" logs and tqdm progress bars; the script uses memmap caching and resumes cleanly.
 - LightGBM GPU can be inconsistent across versions; our code attempts GPU and falls back to CPU automatically.
@@ -284,17 +284,17 @@ Platform notes:
 
 Requirements: No changes are needed for this repo’s environment. Only adjust torch/torchvision lines to match your platform if necessary.
 
-## 📄 Documentation
+## Documentation
 
 The final 1-page report for the judges can be found in `Documentation.md`.
 
-## 👥 Team Cognova
+## Team Cognova
 
 - Pundarikaksh Narayan Tripathi
 - Ahmad Abdullah
 - Yash Raj
 
-## 📝 License
+## License
 
-This project is licensed under the Apache-2.0 License.
+This project is licensed under the Elastic License 2.0.
 

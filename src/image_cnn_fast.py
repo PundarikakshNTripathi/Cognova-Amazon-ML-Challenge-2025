@@ -2,7 +2,7 @@
 
 - Extracts and caches FP16 features via memmap (resumable)
 - Trains LightGBM with early stopping; attempts GPU and falls back to CPU
-- Optional 5-fold OOF generation via --cv for proper ensembling
+- Optional 5-fold OOF generation via  cv for proper ensembling
 """
 
 import os
@@ -27,9 +27,9 @@ from tqdm import tqdm
 import lightgbm as lgb
 from sklearn.model_selection import KFold
 
-# -----------------------------
-# Config
-# -----------------------------
+##               -
+## Config
+##               -
 IMAGE_DIR = "images"
 FEATURES_DTYPE = np.float16
 BATCH_SIZE = 96         # adjust if OOM: try 64 or 48
@@ -38,7 +38,7 @@ IMG_SIZE = 224
 BACKBONE = "resnet50"   # torchvision backbone
 SEED = 42
 
-# Default normalization (fallback if weights.transforms() not available)
+## Default normalization (fallback if weights.transforms() not available)
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD  = [0.229, 0.224, 0.225]
 
@@ -47,9 +47,9 @@ os.makedirs("data", exist_ok=True)
 
 torch.backends.cudnn.benchmark = True
 
-# -----------------------------
-# Helpers
-# -----------------------------
+##               -
+## Helpers
+##               -
 def get_id_col(df: pd.DataFrame) -> str:
     for c in ["sample_id", "id", "Id", "sampleId"]:
         if c in df.columns:
@@ -58,23 +58,23 @@ def get_id_col(df: pd.DataFrame) -> str:
 
 def resolve_image_path(row, id_col: str) -> str:
     sid = str(row[id_col])
-    # Try images/{sample_id}.jpg first (what most downloaders use)
+    ## Try images/{sample_id}.jpg first (what most downloaders use)
     cand1 = os.path.join(IMAGE_DIR, f"{sid}.jpg")
     if os.path.exists(cand1):
         return cand1
-    # Fallback: derive basename from image_link if present
+    ## Fallback: derive basename from image_link if present
     link = str(row.get("image_link", "")) or str(row.get("image_url", ""))
     base = os.path.basename(link)
     if base:
         cand2 = os.path.join(IMAGE_DIR, base)
         if os.path.exists(cand2):
             return cand2
-        # if base has no extension, try adding .jpg
+        ## if base has no extension, try adding .jpg
         if "." not in base:
             cand3 = os.path.join(IMAGE_DIR, base + ".jpg")
             if os.path.exists(cand3):
                 return cand3
-    # Last resort: non-existent path; loader will handle gracefully
+    ## Last resort: non-existent path; loader will handle gracefully
     return cand1
 
 def smape(y_true, y_pred):
@@ -83,9 +83,9 @@ def smape(y_true, y_pred):
     denom = (np.abs(y_true) + np.abs(y_pred)) / 2.0
     return 100.0 * np.mean(np.where(denom == 0, 0, np.abs(y_pred - y_true) / (denom + 1e-12)))
 
-# -----------------------------
-# Dataset
-# -----------------------------
+##               -
+## Dataset
+##               -
 class ImageDataset(Dataset):
     def __init__(self, df: pd.DataFrame, id_col: str, transform):
         self.df = df
@@ -102,25 +102,25 @@ class ImageDataset(Dataset):
             with Image.open(p) as im:
                 im = im.convert("RGB")
         except Exception:
-            # Missing/corrupt -> return plain gray image
+            ## Missing/corrupt -> return plain gray image
             im = Image.new("RGB", (IMG_SIZE, IMG_SIZE), color=(128, 128, 128))
         if self.transform:
             im = self.transform(im)
         return im
 
-# -----------------------------
-# Feature extractor
-# -----------------------------
+##               -
+## Feature extractor
+##               -
 class ResNet50Extractor(nn.Module):
     def __init__(self):
         super().__init__()
-        # Support both new (weights=...) and older (pretrained=True) APIs
+        ## Support both new (weights=...) and older (pretrained=True) APIs
         try:
             weights = models.ResNet50_Weights.IMAGENET1K_V2
             m = models.resnet50(weights=weights)
         except Exception:
             m = models.resnet50(pretrained=True)
-        # keep everything except final fc
+        ## keep everything except final fc
         self.feature_extractor = nn.Sequential(*list(m.children())[:-1])  # -> (N, 2048, 1, 1)
         self.out_dim = 2048
 
@@ -130,7 +130,7 @@ class ResNet50Extractor(nn.Module):
         return x
 
 def build_transforms():
-    # Prefer official weight transforms for correct preprocessing
+    ## Prefer official weight transforms for correct preprocessing
     try:
         weights = models.ResNet50_Weights.IMAGENET1K_V2
         return weights.transforms()
@@ -144,7 +144,7 @@ def build_transforms():
 
 @torch.no_grad()
 def extract_features(df: pd.DataFrame, id_col: str, out_path: str, device: str) -> str:
-    # Robust cache check based on expected file size
+    ## Robust cache check based on expected file size
     n = len(df)
     d = 2048  # resnet50 penultimate feature dim
     expected_bytes = n * d * np.dtype(FEATURES_DTYPE).itemsize
@@ -174,7 +174,7 @@ def extract_features(df: pd.DataFrame, id_col: str, out_path: str, device: str) 
     )
 
     model = ResNet50Extractor().to(device).eval()
-    # memory-map to avoid huge RAM usage
+    ## memory-map to avoid huge RAM usage
     mmap = np.memmap(out_path, mode="w+", dtype=FEATURES_DTYPE, shape=(n, d))
 
     idx = 0
@@ -191,14 +191,14 @@ def extract_features(df: pd.DataFrame, id_col: str, out_path: str, device: str) 
         mmap[idx:idx+bs] = feats
         idx += bs
 
-    # flush to disk
+    ## flush to disk
     del mmap
     gc.collect()
     return out_path
 
-# -----------------------------
-# Train LightGBM and predict
-# -----------------------------
+##               -
+## Train LightGBM and predict
+##               -
 def _make_lgbm_gpu_regressor():
     base = dict(
         objective="regression",
@@ -214,7 +214,7 @@ def _make_lgbm_gpu_regressor():
         n_jobs=-1,
         verbose=-1,
     )
-    # Try modern and legacy GPU configs, else CPU
+    ## Try modern and legacy GPU configs, else CPU
     try:
         return lgb.LGBMRegressor(**{**base, "device_type": "gpu"})
     except TypeError:
@@ -235,7 +235,7 @@ def run_kfold_oof(feat_train_path, feat_test_path, train_df, test_df, id_col, n_
     """Generate proper OOF via KFold using cached features and overwrite CSVs."""
     print(f"[Stage] OOF CV with KFold={n_splits} using cached features")
     if not (os.path.exists(feat_train_path) and os.path.exists(feat_test_path)):
-        raise FileNotFoundError("Cached features not found. Run the script without --cv first to extract.")
+        raise FileNotFoundError("Cached features not found. Run the script without  cv first to extract.")
 
     n_train = len(train_df)
     n_test = len(test_df)
@@ -276,7 +276,7 @@ def run_kfold_oof(feat_train_path, feat_test_path, train_df, test_df, id_col, n_
     oof_smape = _smape(y, oof)
     print(f"[OOF] SMAPE: {oof_smape:.4f}% on {n_train} rows")
 
-    # Clip and save
+    ## Clip and save
     oof = np.clip(oof, 0.01, 10000.0).astype(np.float32)
     test_preds = np.clip(test_preds, 0.01, 10000.0).astype(np.float32)
 
@@ -290,10 +290,10 @@ def run_kfold_oof(feat_train_path, feat_test_path, train_df, test_df, id_col, n_
     print(f" - {sub_path}")
 def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarray):
     print("[Stage] Starting LightGBM training (with early stopping)...")
-    # log1p target
+    ## log1p target
     y_log = np.log1p(y)
 
-    # simple split for speed
+    ## simple split for speed
     n = X_train.shape[0]
     val_size = max(10000, int(0.1 * n))
     idx = np.arange(n)
@@ -321,7 +321,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
     )
     model = None
     trainer = ""
-    # 1) Try LightGBM GPU (newer API)
+    ## 1) Try LightGBM GPU (newer API)
     try:
         print("[Stage] Attempting LightGBM GPU (device_type='gpu')...")
         params = {**base_params, "device_type": "gpu", "gpu_platform_id": 0, "gpu_device_id": 0}
@@ -337,7 +337,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
         )
         trainer = "lgbm_gpu_device_type"
     except Exception as e_gpu1:
-        # 2) Try older LightGBM GPU API
+        ## 2) Try older LightGBM GPU API
         try:
             print("[Stage] Falling back: LightGBM GPU (device='gpu')...")
             params = {**base_params, "device": "gpu"}
@@ -353,7 +353,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
             )
             trainer = "lgbm_gpu_device"
         except Exception as e_gpu2:
-            # 3) CPU LightGBM as default
+            ## 3) CPU LightGBM as default
             try:
                 print("[Stage] LightGBM GPU unavailable; using LightGBM CPU.")
                 params = {**base_params}
@@ -369,7 +369,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
                 )
                 trainer = "lgbm_cpu"
             except Exception as e_cpu:
-                # 4) Optional XGBoost GPU fallback
+                ## 4) Optional XGBoost GPU fallback
                 try:
                     print("[Stage] Falling back to XGBoost (GPU)...")
                     import xgboost as xgb
@@ -402,7 +402,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
                 except Exception as e_xgb:
                     raise RuntimeError(f"All trainers failed (LGBM GPU/CPU, XGB GPU). Last error: {e_xgb}")
 
-    # OOF
+    ## OOF
     if trainer.startswith("lgbm"):
         y_val_pred = model.predict(X_val, num_iteration=getattr(model, "best_iteration_", None))
     else:
@@ -411,7 +411,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
     y_val_true = np.expm1(y_val)
     print(f"Validation SMAPE: {smape(y_val_true, y_val_pred):.4f}% (on {len(y_val_true)} samples)")
 
-    # Fit on full data
+    ## Fit on full data
     if trainer.startswith("lgbm"):
         final_n_estimators = getattr(model, "best_iteration_", None)
         if final_n_estimators is None:
@@ -450,7 +450,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
                 return self.mdl.predict(X)
         model = _XGBWrap2(model_full)
 
-    # Predict
+    ## Predict
     print("[Stage] Predicting on test features...")
     y_pred_test = model.predict(X_test)
     y_pred_test = np.expm1(y_pred_test)
@@ -459,7 +459,7 @@ def train_lgbm_and_predict(X_train: np.ndarray, y: np.ndarray, X_test: np.ndarra
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cv", type=int, default=0, help="Run K-fold OOF with this number of folds (>=2). 0 disables.")
+    parser.add_argument(" cv", type=int, default=0, help="Run K-fold OOF with this number of folds (>=2). 0 disables.")
     args = parser.parse_args()
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Device: {device}")
@@ -472,11 +472,11 @@ def main():
     id_col = get_id_col(train_df)
     assert id_col in test_df.columns, f"ID column {id_col} missing in test.csv"
 
-    # Feature cache paths
+    ## Feature cache paths
     feat_train_path = os.path.join("data", "features_train_resnet50_fp16.npy")
     feat_test_path  = os.path.join("data", "features_test_resnet50_fp16.npy")
 
-    # Extract (or reuse cached) features
+    ## Extract (or reuse cached) features
     print(f"[Stage] Preparing TRAIN features -> {feat_train_path}")
     feat_train_path = extract_features(train_df, id_col, feat_train_path, device)
     print("[Stage] TRAIN features ready.")
@@ -484,23 +484,23 @@ def main():
     feat_test_path  = extract_features(test_df, id_col, feat_test_path, device)
     print("[Stage] TEST features ready.")
 
-    # If CV requested, generate proper OOF + submission and exit
+    ## If CV requested, generate proper OOF + submission and exit
     if args.cv and args.cv >= 2:
         run_kfold_oof(feat_train_path, feat_test_path, train_df, test_df, id_col, n_splits=args.cv)
         return
 
-    # Load features
+    ## Load features
     print("[Stage] Loading feature memmaps into X_train/X_test...")
     X_train = np.memmap(feat_train_path, mode="r", dtype=FEATURES_DTYPE, shape=(len(train_df), 2048))
     X_test  = np.memmap(feat_test_path,  mode="r", dtype=FEATURES_DTYPE, shape=(len(test_df),  2048))
 
     y = train_df["price"].values.astype(np.float32)
 
-    # Train regressor and predict
+    ## Train regressor and predict
     print("[Stage] Launching training + prediction...")
     _, test_preds = train_lgbm_and_predict(X_train, y, X_test)
 
-    # Save outputs
+    ## Save outputs
     print("[Stage] Writing output CSVs...")
     oof_stub = np.zeros_like(y)  # keeping simple; full OOF would need CV
     pd.DataFrame({id_col: train_df[id_col], "predicted_price": oof_stub}).to_csv(

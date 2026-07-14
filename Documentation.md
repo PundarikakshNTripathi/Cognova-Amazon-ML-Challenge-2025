@@ -4,13 +4,13 @@
 **Team Members:** Pundarikaksh Narayan Tripathi, Ahmad Abdullah, Yash Raj 
 **Submission Date:** October 13, 2025
 
----
+ -
 
 ## 1. Executive Summary
 
 Our solution addresses the Smart Product Pricing Challenge with a practical multimodal system leveraging both textual descriptions and product images. We implement two fast, reliable pipelines (Text + CNN image features) and blend them using an Optuna-optimized ensemble. The workflow is resume-friendly and fully tracked via MLflow for reproducibility.
 
----
+ -
 
 ## 2. Methodology Overview
 
@@ -31,13 +31,13 @@ Our initial Exploratory Data Analysis (EDA) revealed that product price is influ
 We adopted a multimodal ensemble strategy with the following key components:
 
 1. **Advanced Text Pipeline**: CPU/GPU variants using Sentence-BERT embeddings (all-MiniLM-L6-v2), with LightGBM and XGBoost regressors. Embeddings are cached to speed up subsequent runs.
-2. **Fast CNN Image Pipeline**: Production-ready approach using ResNet-50 as a fixed feature extractor + LightGBM regressor. Features are memmap-cached (FP16) for fast re-runs. Optional 5-fold OOF generation via `--cv`. This path balances speed, reliability, and performance under time constraints. *(Originally explored a VLM-based approach using moondream2, but prioritized the CNN path for the final submission due to runtime and resource considerations. The VLM pipeline remains available for future integration.)*
+2. **Fast CNN Image Pipeline**: Production-ready approach using ResNet-50 as a fixed feature extractor + LightGBM regressor. Features are memmap-cached (FP16) for fast re-runs. Optional 5-fold OOF generation via ` cv`. This path balances speed, reliability, and performance under time constraints. An experimental VLM pipeline is also provided.
 3. **Optimized Ensemble**: Optuna-tuned non-negative weights to minimize SMAPE on OOF. The code auto-detects log1p OOF mismatches and converts with `expm1`. Blends text and CNN image predictions intelligently.
 
 **Approach Type:** Hybrid Multimodal Ensemble with MLOps  
-**Core Innovation:** Our core innovation lies in the production-ready fusion of two distinct, state-of-the-art pipelines with comprehensive reproducibility features. The final blending weights are mathematically determined using the **Optuna** framework to directly minimize the competition's SMAPE metric on our robust validation set.
+**Core Innovation:** The primary contribution is the integration of dual modality pipelines with optimized blending weights. The final blending weights are mathematically determined using the **Optuna** framework to directly minimize the competition's SMAPE metric on our robust validation set.
 
----
+ -
 
 ## 3. Model Architecture
 
@@ -48,20 +48,20 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 ```mermaid
 flowchart TD
   subgraph text[Text Pipeline]
-    A[Catalog Content] --> B[Sentence-BERT Embeddings]
-    B --> C[LightGBM + XGBoost]
-    C --> D[Text Prediction]
+    A[Catalog Content]  > B[Sentence-BERT Embeddings]
+    B  > C[LightGBM + XGBoost]
+    C  > D[Text Prediction]
   end
 
   subgraph vision[Vision Pipeline - CNN]
-    E[Product Image] --> F[ResNet50 Features + LightGBM]
-    F --> G[Image Prediction - CNN]
+    E[Product Image]  > F[ResNet50 Features + LightGBM]
+    F  > G[Image Prediction - CNN]
   end
 
   subgraph ensemble[Final Ensemble]
-    D --> H[Optuna-Optimized Ensemble]
-    G --> H
-    H --> I[Final Price Prediction]
+    D  > H[Optuna-Optimized Ensemble]
+    G  > H
+    H  > I[Final Price Prediction]
   end
 ```
 
@@ -95,7 +95,7 @@ flowchart TD
     - FP16 memmap cache to reduce RAM
     - DataLoader tuning (num_workers, prefetch)
     - Autocast on CUDA for throughput
-    - 5-fold OOF via `--cv`
+    - 5-fold OOF via ` cv`
 
 **MLOps and Reproducibility Features:**
 
@@ -104,7 +104,7 @@ flowchart TD
 - **Progress Persistence**: Ability to resume long-running processes with progress logs
 - **Environment Management**: Comprehensive setup instructions for CPU/GPU environments with automatic fallback
 
----
+ -
 
 ## 4. Model Performance
 
@@ -124,7 +124,7 @@ Our final model's performance was rigorously evaluated using a robust 5-fold str
 - **Memory Efficiency**: Optimized for various hardware configurations
 - **Reproducibility**: 100% reproducible results through comprehensive experiment tracking
 
----
+ -
 
 ## 5. Conclusion
 
@@ -139,7 +139,7 @@ Key achievements include:
 
 This production-ready, cache-first workflow with MLflow tracking is designed for reliability, speed, and clean integration of multimodal signals for pricing prediction.
 
----
+ -
 
 ## Appendix
 
@@ -160,7 +160,7 @@ This production-ready, cache-first workflow with MLflow tracking is designed for
 - CUDA-capable GPU (recommended for optimal performance)
 - Comprehensive dependency management via `requirements.txt`
 
-### C. Changes vs. Original Plan and Future Work
+### C. Architectural Adjustments and Future Work
 
 We originally planned to rely heavily on a VLM for image signals but shifted to a faster, more predictable CNN feature path (ResNet50 + LightGBM) for the final run. The VLM pipeline remains available and can be integrated later as an additional model in the ensemble.
 

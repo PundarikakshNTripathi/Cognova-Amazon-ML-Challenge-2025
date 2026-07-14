@@ -4,7 +4,7 @@ Uses CUDA for fast embedding generation and XGBoost GPU; LightGBM may fall back
 to CPU for stability. Outputs OOF/test predictions for ensembling.
 """
 
-# Requires a CUDA environment and GPU-enabled builds for best speed.
+## Requires a CUDA environment and GPU-enabled builds for best speed.
 
 import pandas as pd
 import numpy as np
@@ -18,14 +18,14 @@ import os
 from utils import smape, start_mlflow_run
 from xgboost.callback import EarlyStopping
 
-# --- Configuration ---
+##  - Configuration  -
 EXPERIMENT_NAME = "Amazon-Price-Prediction"
 RUN_NAME = "GPU_Text_Ensemble_SBERT_LGBM_XGB"
 N_SPLITS = 5
 TEXT_MODEL_NAME = 'all-MiniLM-L6-v2'
 EMBEDDINGS_FILE = 'data/text_embeddings.npy'
 
-# --- 1. Data Loading and Preprocessing ---
+##  - 1. Data Loading and Preprocessing  -
 print("Loading data...")
 train_df = pd.read_csv('data/train.csv')
 test_df = pd.read_csv('data/test.csv')
@@ -39,13 +39,13 @@ def extract_ipq(text):
     return int(match.group(1)) if match else 1.0
 full_df['ipq'] = full_df['catalog_content'].apply(extract_ipq)
 
-# --- 2. Feature Extraction (Sentence-BERT Embeddings with Caching) ---
+##  - 2. Feature Extraction (Sentence-BERT Embeddings with Caching)  -
 if os.path.exists(EMBEDDINGS_FILE):
     print(f"Loading cached embeddings from {EMBEDDINGS_FILE}...")
     text_embeddings = np.load(EMBEDDINGS_FILE)
 else:
     print(f"Creating text embeddings with '{TEXT_MODEL_NAME}'... (This will take a while on the first run)")
-    # Use device='cuda' for SentenceTransformer to leverage GPU for embedding generation
+    ## Use device='cuda' for SentenceTransformer to leverage GPU for embedding generation
     text_model = SentenceTransformer(TEXT_MODEL_NAME, device='cuda')
     text_embeddings = text_model.encode(full_df['catalog_content'].astype(str).tolist(), show_progress_bar=True, device='cuda')
     print(f"Saving embeddings to {EMBEDDINGS_FILE} for future runs...")
@@ -57,12 +57,12 @@ X_train = X_full[:len(train_df)]
 X_test = X_full[len(train_df):]
 y_train = train_df['price'].values
 
-# --- 3. Stratified Sampling for Robust Cross-Validation ---
+##  - 3. Stratified Sampling for Robust Cross-Validation  -
 num_bins = int(np.floor(1 + np.log2(len(train_df))))
 train_df['price_bins'] = pd.cut(train_df['price'], bins=num_bins, labels=False)
 skf = StratifiedKFold(n_splits=N_SPLITS, shuffle=True, random_state=42)
 
-# --- 4. Model Training (GPU) ---
+##  - 4. Model Training (GPU)  -
 with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
     mlflow.log_params({"n_splits": N_SPLITS, "text_model": TEXT_MODEL_NAME, "device": "gpu"})
     
@@ -70,15 +70,15 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
     oof_preds_xgb, test_preds_xgb = np.zeros(len(train_df)), np.zeros(len(test_df))
 
     for fold, (train_idx, val_idx) in enumerate(skf.split(X_train, train_df['price_bins'])):
-        print(f"--- FOLD {fold+1}/{N_SPLITS} ---")
+        print(f" - FOLD {fold+1}/{N_SPLITS}  -")
         X_train_fold, y_train_fold = X_train[train_idx], y_train[train_idx]
         X_val_fold, y_val_fold = X_train[val_idx], y_train[val_idx]
 
-        # === LightGBM (CPU Fallback) ===
-        # NOTE: Using CPU for LightGBM due to GPU numerical precision issues
-        # GPU version showed convergence problems (200+ SMAPE) while CPU version
-        # performs reliably (60.88 SMAPE). This maintains ensemble diversity
-        # while ensuring model quality.
+        ## === LightGBM (CPU Fallback) ===
+        ## NOTE: Using CPU for LightGBM due to GPU numerical precision issues
+        ## GPU version showed convergence problems (200+ SMAPE) while CPU version
+        ## performs reliably (60.88 SMAPE). This maintains ensemble diversity
+        ## while ensuring model quality.
         print("  - Training LightGBM on CPU (GPU fallback for stability)...")
         lgb_model = lgb.LGBMRegressor(
             random_state=42, 
@@ -90,7 +90,7 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
             verbose=-1
         )
         
-        # Fix: Use proper early stopping syntax
+        ## Fix: Use proper early stopping syntax
         lgb_model.fit(
             X_train_fold, y_train_fold, 
             eval_set=[(X_val_fold, y_val_fold)],
@@ -100,13 +100,13 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
         )
         print("  ✓ LightGBM CPU training successful!")
         
-        # CRITICAL: Save LightGBM predictions
+        ## CRITICAL: Save LightGBM predictions
         oof_preds_lgb[val_idx] = lgb_model.predict(X_val_fold)
         test_preds_lgb += lgb_model.predict(X_test) / N_SPLITS
 
-        # === XGBoost (GPU) ===
-        # Using GPU acceleration for XGBoost as it shows stable performance
-        # and provides the desired hardware diversity for ensemble robustness
+        ## === XGBoost (GPU) ===
+        ## Using GPU acceleration for XGBoost as it shows stable performance
+        ## and provides the desired hardware diversity for ensemble robustness
         print("  - Training XGBoost on GPU...")
         xgb_model = xgb.XGBRegressor(
             random_state=42, 
@@ -120,7 +120,7 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
             early_stopping_rounds=100  # Move early stopping to parameters
         )
         
-        # Simplified XGBoost training (remove try-except complexity)
+        ## Simplified XGBoost training (remove try-except complexity)
         xgb_model.fit(
             X_train_fold,
             y_train_fold,
@@ -129,11 +129,11 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
         )
         print("  ✓ XGBoost GPU training successful!")
         
-        # Save XGBoost predictions
+        ## Save XGBoost predictions
         oof_preds_xgb[val_idx] = xgb_model.predict(X_val_fold)
         test_preds_xgb += xgb_model.predict(X_test) / N_SPLITS
 
-    # --- 5. Evaluation and Blending ---
+    ##  - 5. Evaluation and Blending  -
     y_train_orig = np.expm1(y_train)
     smape_lgb = smape(y_train_orig, np.expm1(oof_preds_lgb))
     smape_xgb = smape(y_train_orig, np.expm1(oof_preds_xgb))
@@ -148,7 +148,7 @@ with start_mlflow_run(EXPERIMENT_NAME, RUN_NAME) as run:
     print(f"Text Ensemble OOF SMAPE: {ensemble_smape:.4f}")
     mlflow.log_metric("text_ensemble_oof_smape", ensemble_smape)
 
-    # --- 6. Save Predictions ---
+    ##  - 6. Save Predictions  -
     print("Saving text model predictions...")
     os.makedirs('submissions', exist_ok=True)
     

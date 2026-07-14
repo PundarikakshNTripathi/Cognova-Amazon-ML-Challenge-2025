@@ -18,26 +18,26 @@ import optuna
 import mlflow
 from datetime import datetime
 
-# Config: point these to your files if names differ
+## Config: point these to your files if names differ
 SUB_DIR = "submissions"
 TRAIN_CSV = "data/train.csv"
 
-# Known model files (edit if your filenames differ)
-# The loader will auto-detect id/pred columns.
+## Known model files (edit if your filenames differ)
+## The loader will auto-detect id/pred columns.
 MODEL_SPECS = [
-    # Text models
+    ## Text models
     {"name": "text_cpu", "oof": f"{SUB_DIR}/oof_text_preds_cpu.csv", "sub": f"{SUB_DIR}/submission_text_cpu.csv"},
     {"name": "text_gpu", "oof": f"{SUB_DIR}/oof_text_preds_gpu.csv", "sub": f"{SUB_DIR}/submission_text_gpu.csv"},
-    # CNN image model you just trained
+    ## CNN image model you just trained
     {"name": "image_cnn", "oof": f"{SUB_DIR}/oof_image_cnn.csv", "sub": f"{SUB_DIR}/submission_image_cnn.csv"},
-    # Optional VLM (if you have OOF ready)
+    ## Optional VLM (if you have OOF ready)
     {"name": "vlm", "oof": f"{SUB_DIR}/oof_vlm_preds.csv", "sub": f"{SUB_DIR}/submission_vlm_only.csv"},
 ]
 
 EXPERIMENT = "Amazon-Price-Prediction"
 RUN_NAME = f"ENSEMBLE_Advanced_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
-# -------- utils --------
+##      utils     
 def smape(y_true, y_pred):
     """Compute SMAPE in percentage; robust to zeros via small epsilon."""
     y_true = np.asarray(y_true, dtype=np.float64)
@@ -55,10 +55,10 @@ def detect_id_col(cols):
 
 def detect_pred_col(df, exclude):
     """Choose a reasonable prediction column (price/predicted_price/etc.)."""
-    # Try common names
+    ## Try common names
     for c in ["price", "predicted_price", "prediction", "vlm_pred"]:
         if c in df.columns and c not in exclude: return c
-    # Else pick the first numeric column not in exclude
+    ## Else pick the first numeric column not in exclude
     num_cols = [c for c in df.columns if c not in exclude and pd.api.types.is_numeric_dtype(df[c])]
     if not num_cols:
         raise KeyError("No numeric prediction column found.")
@@ -75,9 +75,9 @@ def load_oof(spec, id_key="id"):
     df = pd.read_csv(path)
     id_col = detect_id_col(df.columns)
     pred_col = detect_pred_col(df, exclude=[id_col])
-    # Convert to original price scale if OOF appears to be in log1p scale
+    ## Convert to original price scale if OOF appears to be in log1p scale
     s = pd.to_numeric(df[pred_col], errors="coerce")
-    # Heuristic: values typically in [0, ~25] and median < 10 indicate log1p for prices up to ~10k
+    ## Heuristic: values typically in [0, ~25] and median < 10 indicate log1p for prices up to ~10k
     if s.notna().mean() > 0.99 and s.median() < 10 and s.max() < 25:
         s = np.expm1(s)
     out = pd.DataFrame({id_key: df[id_col], spec["name"]: s})
@@ -101,13 +101,13 @@ def softmax(x):
     e = np.exp(x)
     return e / (e.sum() + 1e-12)
 
-# -------- load data --------
+##      load data     
 train = pd.read_csv(TRAIN_CSV)
 id_col = detect_id_col(train.columns)
 target_col = "price"
 assert target_col in train.columns, "price target not found in train.csv"
 
-# merge OOFs
+## merge OOFs
 oof_frames = []
 used_specs = []
 for spec in MODEL_SPECS:
@@ -124,12 +124,12 @@ oof_merged = oof_frames[0]
 for f in oof_frames[1:]:
     oof_merged = oof_merged.merge(f, on="id", how="inner")
 
-# attach ground truth
+## attach ground truth
 train_truth = train[[id_col, target_col]].copy()
 train_truth.columns = ["id", "price"]
 oof_merged = oof_merged.merge(train_truth, on="id", how="inner")
 
-# drop models with constant or near-constant OOF (e.g., zero stubs)
+## drop models with constant or near-constant OOF (e.g., zero stubs)
 model_cols = [spec["name"] for spec in used_specs if spec["name"] in oof_merged.columns]
 kept = []
 for c in model_cols:
@@ -141,13 +141,13 @@ model_cols = kept
 if len(model_cols) == 0:
     raise RuntimeError("All OOFs are constant. Need at least one valid OOF to ensemble.")
 
-# drop rows with any NaN across chosen models or target
+## drop rows with any NaN across chosen models or target
 oof_train = oof_merged.dropna(subset=model_cols + ["price"]).reset_index(drop=True)
 
 X = oof_train[model_cols].values.astype(np.float64)
 y = oof_train["price"].values.astype(np.float64)
 
-# -------- Optuna objective (non-negative weights, sum=1 via softmax) --------
+##      Optuna objective (non-negative weights, sum=1 via softmax)     
 def objective(trial):
     """Optuna objective: softmax-normalized weights to minimize OOF SMAPE."""
     raw = [trial.suggest_float(f"w_{c}", 0.0, 2.0) for c in model_cols]
@@ -155,7 +155,7 @@ def objective(trial):
     pred = X.dot(w)
     return smape(y, pred)
 
-# -------- MLflow + Optuna run --------
+##      MLflow + Optuna run     
 mlflow.set_experiment(EXPERIMENT)
 with mlflow.start_run(run_name=RUN_NAME) as run:
     mlflow.log_params({
@@ -171,7 +171,7 @@ with mlflow.start_run(run_name=RUN_NAME) as run:
     oof_pred = X.dot(best_w)
     best_smape = smape(y, oof_pred)
 
-    # log
+    ## log
     mlflow.log_metric("ensemble_oof_smape", best_smape)
     for c, w in zip(model_cols, best_w):
         mlflow.log_param(f"weight_{c}", float(w))
@@ -180,8 +180,8 @@ with mlflow.start_run(run_name=RUN_NAME) as run:
     print(f"Best weights: {dict(zip(model_cols, map(float, best_w)))}")
     print(f"OOF SMAPE: {best_smape:.4f}% on {len(y)} samples")
 
-    # -------- build test blend --------
-    # Collect only the models that were kept during OOF optimization
+    ##      build test blend     
+    ## Collect only the models that were kept during OOF optimization
     sub_frames = []
     for spec in used_specs:
         s = load_sub(spec, id_key="id")
@@ -195,7 +195,7 @@ with mlflow.start_run(run_name=RUN_NAME) as run:
     for f in sub_frames[1:]:
         sub_merged = sub_merged.merge(f, on="id", how="outer")
 
-    # align to test ids present in all available subs; fill missing with row-median
+    ## align to test ids present in all available subs; fill missing with row-median
     model_cols_test = [c for c in model_cols if c in sub_merged.columns]
     M = sub_merged[model_cols_test].copy()
     row_med = M.median(axis=1)
@@ -206,7 +206,7 @@ with mlflow.start_run(run_name=RUN_NAME) as run:
 
     test_pred = M.values.dot(W)
     out = pd.DataFrame({"id": sub_merged["id"], "price": np.clip(test_pred, 0.01, 10000.0)})
-    # restore original id column name
+    ## restore original id column name
     out.columns = [id_col, "price"]
     out = out.sort_values(by=id_col).reset_index(drop=True)
 
