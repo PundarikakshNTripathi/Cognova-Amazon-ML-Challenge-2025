@@ -204,20 +204,20 @@ Our architecture consists of two parallel pipelines whose outputs are fed into a
 ```mermaid
 flowchart TD
   subgraph text[Text Pipeline]
-    A[Catalog Content]  > B[Sentence-BERT Embeddings]
-    B  > C[LightGBM + XGBoost]
-    C  > D[Text Prediction]
+    A[Catalog Content] --> B[Sentence-BERT Embeddings]
+    B --> C[LightGBM + XGBoost]
+    C --> D[Text Prediction]
   end
 
   subgraph vision[Vision Pipeline - CNN]
-    E[Product Image]  > F[ResNet50 Features + LightGBM]
-    F  > G[Image Prediction - CNN]
+    E[Product Image] --> F[ResNet50 Features + LightGBM]
+    F --> G[Image Prediction - CNN]
   end
 
   subgraph ensemble[Final Ensemble]
-    D  > H[Optuna-Optimized Ensemble]
-    G  > H
-    H  > I[Final Price Prediction]
+    D --> H[Optuna-Optimized Ensemble]
+    G --> H
+    H --> I[Final Price Prediction]
   end
 ```
 ## Performance Metrics (Out-of-Fold)
@@ -296,5 +296,5 @@ The final 1-page report for the judges can be found in `Documentation.md`.
 
 ## License
 
-This project is licensed under the Elastic License 2.0.
+This project is licensed under the MIT License.
 
